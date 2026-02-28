@@ -45,7 +45,7 @@ Two deployment modes are supported: self-hosted and S3+CDN.
 │ -blocksxor=0 │         │  CDN fetch       │         │  server      │
 └──────────────┘         └──────────────────┘         │  serve       │
                                                       └──────────────┘
-                         ┌──────────────────┐  upload  ┌──────────────┐
+                         ┌──────────────────┐  upload ┌──────────────┐
                          │  slimnode-server │ ──────> │  S3 bucket   │
                          │  sync (daemon)   │         │  + CDN       │
                          └──────────────────┘         └──────────────┘
