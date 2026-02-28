@@ -37,7 +37,7 @@ Two deployment modes are supported: self-hosted and S3+CDN.
 **S3+CDN** — block files are served from a CDN, the server only provides the manifest:
 
 ```
-┌──────────────┐         ┌─────────────────┐  files   ┌──────────────┐
+┌──────────────┐         ┌──────────────────┐  files  ┌──────────────┐
 │  bitcoind    │  reads  │  slimnode mount  │ ──────> │  CDN (S3)    │
 │              │ ──────> │  (FUSE)          │         └──────────────┘
 │ -blocksdir=  │         │                  │ manifest┌──────────────┐
@@ -231,8 +231,6 @@ bitcoind \
 ## Reference
 
 Full configuration options, CLI commands, storage layout, manifest management, and troubleshooting: [docs/reference.md](docs/reference.md)
-
----
 
 ## Contributing
 
