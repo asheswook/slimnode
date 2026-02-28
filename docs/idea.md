@@ -44,9 +44,9 @@ For reference, a standard full node today requires 920 GB and grows indefinitely
 
 Running a self-contained full node — all data stored locally, no external dependencies — is always the ideal. You depend on no one, have instant access to all historical data, and impose no trust assumptions on anyone. If you can afford 1–2 TB of fast storage, that is the right path.
 
-SlimNode is for everyone else: someone setting up their first node on a modest machine, a user on a tight budget, or a person who wants to participate in Bitcoin's security model before committing to a full hardware upgrade. Block validation on a SlimNode is still full validation — every transaction, every signature, every block — the only trade-off is that historical block retrieval depends on an archive server.
+SlimNode is for everyone else: someone setting up their first node on a modest machine, a user on a tight budget, or someone who wants to run a full node without buying 2 TB of storage upfront. Block validation on a SlimNode is still full validation — every transaction, every signature, every block — the only trade-off is that historical block retrieval depends on an archive server.
 
-The intended trajectory: run SlimNode now, learn how Bitcoin nodes work, and migrate to a fully self-contained node when hardware costs allow. SlimNode is a bridge, not a destination.
+The idea is to run SlimNode now, learn how Bitcoin nodes work, and move to a standard full node when storage gets cheaper.
 
 ## Compatible With Any Bitcoin Core-Compatible Implementation
 
@@ -56,7 +56,7 @@ SlimNode operates entirely at the filesystem layer — it has no knowledge of wh
 - **Bitcoin Knots**
 - Any other implementation that uses `-blocksdir` and the standard block file format
 
-The choice of implementation is entirely yours. SlimNode takes no position.
+SlimNode doesn't care which one you run.
 
 ## Who Provides the Archive?
 
@@ -93,7 +93,7 @@ If the archive server provides corrupted or tampered data, Bitcoin Core rejects 
 | Tamper with historical block data | ❌ | Block hash changes → rejected immediately |
 | Deny service (serve garbage data) | ⚠️ | Falls back to "block unavailable" — same as a pruned node. Switch servers. |
 
-The key point: **if an attacker tampers with archive data, you will know**. And there is little incentive to try — the UTXO set (the source of truth for balances) lives locally and cannot be influenced by the archive server.
+**If an attacker tampers with archive data, you will know.** And there is little incentive to try — the UTXO set (the source of truth for balances) lives locally and cannot be influenced by the archive server.
 
 ### How does verification work during initial setup?
 
@@ -109,7 +109,7 @@ No. Light clients (SPV wallets) do not validate transactions — they rely on th
 
 SlimNode fetches block data at the individual block level using blockmaps, not as complete 128 MB file units. The archive server can observe which block files are accessed, but not which specific transactions or addresses you care about — a single block file contains thousands of transactions from many users.
 
-Unlike Neutrino (BIP157/158), SlimNode is not a light client — it runs full validation. The privacy tradeoff is that the archive server can see which block-level ranges are requested, but this requires no changes to the Bitcoin protocol or P2P layer.
+The server can see which byte ranges are requested per file. No protocol or P2P changes required.
 
 ### What if the archive server goes down?
 
@@ -134,8 +134,8 @@ They address different problems and are complementary.
 
 Bitcoin's block integrity rests on a chain of Merkle commitments: each block header contains a Merkle root that commits to every transaction in that block. Altering a single transaction changes the Merkle root, which changes the block hash, which invalidates the proof-of-work. SlimNode's trust model is built entirely on this existing structure — no new cryptography, no new protocol.
 
-Utreexo applies a similar idea to the UTXO set: instead of storing the full set (~10 GB), a node keeps a compact accumulator (~1 KB) that can prove any coin's existence with a Merkle inclusion proof. It is a genuinely elegant approach to a real problem — chainstate storage — but it requires nodes to exchange those proofs over a new P2P sub-protocol, which means changes to node software and gradual network adoption.
+Utreexo applies a similar idea to the UTXO set: instead of storing the full set (~10 GB), a node keeps a compact accumulator (~1 KB) that can prove any coin's existence with a Merkle inclusion proof. It is an elegant approach to a real problem — chainstate storage — but it requires nodes to exchange those proofs over a new P2P sub-protocol, which means changes to node software and gradual network adoption.
 
 SlimNode targets a different constraint: block archive storage (~720 GB of `blk*.dat` files), not chainstate storage. It requires no changes to the Bitcoin protocol, no cooperation from peers, and works today with any standard node using only the existing `-blocksdir` flag.
 
-The two approaches are not in competition. A future node could use Utreexo for a compact UTXO set and SlimNode for the block archive simultaneously.
+They can coexist — a future node could use Utreexo for a compact UTXO set and SlimNode for the block archive.

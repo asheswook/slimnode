@@ -14,7 +14,7 @@ SlimNode treats historical block files as what they are: immutable, rarely-acces
 
 **Trustless.** Fetched block data is verified by Bitcoin Core's own mechanisms: proof-of-work validation and block hash comparison on every read. A malicious or corrupted server cannot cause silent data corruption.
 
-**Implementation-agnostic.** SlimNode works with Bitcoin Core, Bitcoin Knots, and any other implementation that supports `-blocksdir` and the standard block file format. The choice of software is entirely yours.
+**Implementation-agnostic.** SlimNode works with Bitcoin Core, Bitcoin Knots, and any other implementation that supports `-blocksdir` and the standard block file format.
 
 For the full design rationale, trust model, privacy considerations, and Q&A, see [idea](docs/idea.md).
 
