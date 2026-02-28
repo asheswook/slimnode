@@ -107,11 +107,9 @@ No. Light clients (SPV wallets) do not validate transactions — they rely on th
 
 ### What about privacy?
 
-SlimNode fetches block files as complete 128 MB units. The archive server can observe which block files are downloaded, but not which specific transactions or addresses you care about — a single block file contains thousands of transactions from many users.
+SlimNode fetches block data at the individual block level using blockmaps, not as complete 128 MB file units. The archive server can observe which block files are accessed, but not which specific transactions or addresses you care about — a single block file contains thousands of transactions from many users.
 
-This is conceptually similar to Neutrino (BIP157/158) but operates at the block-file level and requires no changes to the Bitcoin protocol or P2P layer.
-
-For stronger privacy: self-host the archive server, or route traffic through Tor.
+Unlike Neutrino (BIP157/158), SlimNode is not a light client — it runs full validation. The privacy tradeoff is that the archive server can see which block-level ranges are requested, but this requires no changes to the Bitcoin protocol or P2P layer.
 
 ### What if the archive server goes down?
 
