@@ -42,7 +42,7 @@ For reference, a standard full node today requires 920 GB and grows indefinitely
 
 ## A Stepping Stone
 
-Running a self-contained full node — all data stored locally, no external dependencies — is always the gold standard. You depend on no one, have instant access to all historical data, and impose no trust assumptions on anyone. If you can afford 1–2 TB of fast storage, that is the right path.
+Running a self-contained full node — all data stored locally, no external dependencies — is always the ideal. You depend on no one, have instant access to all historical data, and impose no trust assumptions on anyone. If you can afford 1–2 TB of fast storage, that is the right path.
 
 SlimNode is for everyone else: someone setting up their first node on a modest machine, a user on a tight budget, or a person who wants to participate in Bitcoin's security model before committing to a full hardware upgrade. Block validation on a SlimNode is still full validation — every transaction, every signature, every block — the only trade-off is that historical block retrieval depends on an archive server.
 
