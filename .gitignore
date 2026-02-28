@@ -1,0 +1,14 @@
+bin/
+/slimnode
+/slimnode-server
+*.exe
+.sisyphus/
+*.db
+*.db-wal
+*.db-shm
+.idea/
+.vscode/
+vendor/
+coverage.out
+
+AGENTS.md
