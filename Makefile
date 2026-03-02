@@ -1,4 +1,4 @@
-.PHONY: build test test-integration test-cover vet lint clean
+.PHONY: build test test-integration test-cover vet lint clean release
 
 build:
 	CGO_ENABLED=0 go build -o bin/slimnode ./cmd/slimnode
@@ -21,3 +21,10 @@ lint:
 
 clean:
 	rm -rf bin/
+
+release:
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/slimnode-linux-amd64 ./cmd/slimnode
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/slimnode-server-linux-amd64 ./cmd/slimnode-server
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/slimnode-linux-arm64 ./cmd/slimnode
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o bin/slimnode-server-linux-arm64 ./cmd/slimnode-server
+	cd bin && sha256sum slimnode-linux-amd64 slimnode-linux-arm64 slimnode-server-linux-amd64 slimnode-server-linux-arm64 > checksums.txt
