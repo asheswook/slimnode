@@ -136,6 +136,7 @@ To stop the daemon:
 
 ```bash
 slimnode stop --config ~/.slimnode/config.conf
+```
 
 ## Building from Source
 
