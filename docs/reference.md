@@ -76,9 +76,9 @@ compaction.pre-download = true       # pre-download before compaction
 
 ```
 slimnode init      Initialize (fetch manifest, download blockmaps, create directory structure)
-slimnode mount     Mount FUSE filesystem and start daemon
+slimnode mount     Mount FUSE filesystem (use --background to daemonize)
+slimnode stop      Stop the running SlimNode daemon
 slimnode status    Show file state summary (local/cached/remote counts)
-slimnode compact   Run manual compaction (move finalized files to cache)
 ```
 
 ### `slimnode-server`
@@ -100,6 +100,8 @@ slimnode-server snapshot       Create blocks/index snapshot (.tar.zst)
 ```
 ~/.slimnode/
 ├── config.conf                # configuration
+├── slimnode.pid               # daemon PID (when running with --background)
+├── slimnode.log               # daemon log output
 ├── cache/
 │   ├── slimnode.db            # SQLite metadata (file states, access times)
 │   ├── manifest.json          # cached server manifest
