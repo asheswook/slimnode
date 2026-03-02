@@ -23,7 +23,7 @@ import (
 
 // MountCmd implements the `slimnode mount` subcommand.
 type MountCmd struct {
-	Foreground bool `long:"foreground" short:"f" description:"Run in foreground (default: background)"`
+	Background bool `long:"background" short:"b" description:"Run as background daemon"`
 }
 
 // Execute runs the mount command.
@@ -31,6 +31,14 @@ func (m *MountCmd) Execute(args []string) error {
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
+	}
+
+	baseDir := filepath.Dir(cfg.ConfigFile)
+	pidPath := filepath.Join(baseDir, "slimnode.pid")
+	logPath := filepath.Join(baseDir, "slimnode.log")
+
+	if m.Background && !isDaemonChild() {
+		return daemonize(pidPath, logPath)
 	}
 
 	if err := os.MkdirAll(cfg.General.CacheDir, 0755); err != nil {
@@ -166,6 +174,7 @@ func (m *MountCmd) Execute(args []string) error {
 		slog.Info("shutting down slimnode")
 		_ = fs.Stop()
 		_ = st.Close()
+		removePID(pidPath)
 		return nil
 	})
 

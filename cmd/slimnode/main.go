@@ -17,6 +17,7 @@ type options struct {
 	Init    cmd.InitCmd    `command:"init" description:"Initialize SlimNode (download snapshots, create config)"`
 	Status  cmd.StatusCmd  `command:"status" description:"Show SlimNode status"`
 	Compact cmd.CompactCmd `command:"compact" description:"Run manual compaction"`
+	Stop    cmd.StopCmd    `command:"stop" description:"Stop the running SlimNode daemon"`
 }
 
 func main() {
