@@ -20,48 +20,24 @@ For the full design rationale, trust model, privacy considerations, and Q&A, see
 
 ## How It Works
 
-Two deployment modes are supported: self-hosted and S3+CDN.
-
-**Self-Hosted** — the server serves block files directly over HTTP:
-
 ```
 ┌──────────────┐         ┌──────────────────┐         ┌──────────────┐
-│  bitcoind    │  reads  │  slimnode mount  │  HTTP   │  slimnode    │
+│  bitcoind    │  reads  │  slimnode mount  │  HTTP   │  SlimNode    │
 │              │ ──────> │  (FUSE)          │ ──────> │  server      │
-│ -blocksdir=  │         │                  │         │  serve       │
-│  /mnt/blocks │         │  local cache +   │         │              │
-│ -blocksxor=0 │         │  remote fetch    │         │  blocks dir  │
+│ -blocksdir=  │         │                  │         │              │
+│  /mnt/blocks │         │  local cache +   │         │  (public or  │
+│ -blocksxor=0 │         │  remote fetch    │         │  self-hosted) │
 └──────────────┘         └──────────────────┘         └──────────────┘
 ```
 
-**S3+CDN** — block files are served from a CDN, the server only provides the manifest:
-
-```
-┌──────────────┐         ┌──────────────────┐  files  ┌──────────────┐
-│  bitcoind    │  reads  │  slimnode mount  │ ──────> │  CDN (S3)    │
-│              │ ──────> │  (FUSE)          │         └──────────────┘
-│ -blocksdir=  │         │                  │ manifest┌──────────────┐
-│  /mnt/blocks │         │  local cache +   │ ──────> │  slimnode    │
-│ -blocksxor=0 │         │  CDN fetch       │         │  server      │
-└──────────────┘         └──────────────────┘         │  serve       │
-                                                      └──────────────┘
-                         ┌──────────────────┐  upload ┌──────────────┐
-                         │  slimnode-server │ ──────> │  S3 bucket   │
-                         │  sync (daemon)   │         │  + CDN       │
-                         └──────────────────┘         └──────────────┘
-```
-
-The client auto-detects which mode to use. If the manifest contains a `base_url` field, file downloads go directly to the CDN. Otherwise, files are fetched from the self-hosted server.
-
 - **Active blocks** (recently written by bitcoind): stored locally as normal files
-- **Finalized blocks** (full 128 MB blk/rev files): fetched from archive server or CDN on demand, cached on local disk with LRU eviction
+- **Finalized blocks** (full 128 MB blk/rev files): fetched from archive server on demand, cached on local disk with LRU eviction
 - **FUSE mount**: transparently serves both local and remote files to bitcoind
 
 ## Prerequisites
 
 - Linux (FUSE3 support required)
 - Go 1.22+ (build only)
-- A synced Bitcoin full node (for the archive server)
 - `fusermount3` installed on the client machine
 
 ```bash
@@ -93,72 +69,9 @@ CGO_ENABLED=0 go build -o bin/slimnode-server ./cmd/slimnode-server
 
 ## Quick Start
 
-> **Public archive server coming soon.** A free public mainnet SlimNode server will be available shortly, so you can skip Step 1 and go straight to Step 2. Watch this repository for updates.
+A free public mainnet server is available at `https://slimnode.pororo.ro`. The steps below use this server. To run your own, see the [Server Setup Guide](docs/server.md).
 
-### 1. Set Up the Archive Server
-
-The archive server must run a **fully synced** Bitcoin node with **`-blocksxor=0`**. This is required because SlimNode does not implement XOR obfuscation — the server's block files must be unobfuscated.
-
-> **Important:** If your existing node was synced with the default XOR enabled, you must resync with `-blocksxor=0`. Bitcoin Core uses a per-node random XOR key, making existing block data incompatible with XOR-disabled mode.
-
-Choose one of two deployment modes:
-
-**Option A: Self-Hosted**
-
-```bash
-# Generate initial manifest
-bin/slimnode-server manifest-gen \
-  --blocks-dir <bitcoind block dir (e.g. ~/.bitcoin/blocks)> \
-  --output manifest.json \
-  --chain mainnet
-
-# Start the HTTP server
-# --scan-interval automatically regenerates the manifest as new files finalize
-bin/slimnode-server serve \
-  --blocks-dir <bitcoind block dir (e.g. ~/.bitcoin/blocks)> \
-  --manifest manifest.json \
-  --chain mainnet \
-  --scan-interval 10m \
-  --listen :8080
-```
-
-**Option B: S3+CDN**
-
-Block files are uploaded to S3 and served via CDN. The `sync` daemon handles scanning, uploading, and manifest generation. A lightweight `serve` instance provides the manifest API for clients.
-
-```bash
-# Start the sync daemon
-bin/slimnode-server sync \
-  --blocks-dir <bitcoind block dir (e.g. ~/.bitcoin/blocks)> \
-  --bucket my-slimnode-bucket \
-  --base-url https://cdn.example.com \
-  --endpoint https://account-id.r2.cloudflarestorage.com \
-  --manifest manifest.json \
-  --scan-interval 10m
-
-# Start serve for manifest API (reads manifest written by sync)
-bin/slimnode-server serve \
-  --blocks-dir <bitcoind block dir (e.g. ~/.bitcoin/blocks)> \
-  --manifest manifest.json \
-  --listen :8080
-```
-
-The `--endpoint` flag is for S3-compatible providers (Cloudflare R2, Backblaze, Wasabi, MinIO). For AWS S3, omit it. AWS credentials are resolved via the standard SDK chain (environment variables, `~/.aws/credentials`, IAM role).
-
-When the client fetches the manifest and sees a `base_url`, file downloads go directly to the CDN instead of the self-hosted server.
-
-The server exposes:
-
-| Endpoint | Description |
-|---|---|
-| `GET /v1/health` | Health check (`{"status":"ok"}`) |
-| `GET /v1/manifest` | Manifest JSON (supports `If-None-Match` / `ETag`) |
-| `GET /v1/file/{name}` | Block file download (supports `Range`, returns `X-SHA256` header) |
-| `GET /v1/blockmap/{name}` | Blockmap file download (binary) |
-
-### 2. Set Up the SlimNode Client
-
-On the machine where you want to run bitcoind with reduced storage:
+### 1. Set Up the SlimNode Client
 
 ```bash
 # Create config file
@@ -173,7 +86,7 @@ general.bitcoin-datadir = ~/.bitcoin
 general.log-level = info
 
 [server]
-server.url = http://your-archive-server:8080
+server.url = https://slimnode.pororo.ro
 server.request-timeout = 30s
 server.retry-count = 3
 
@@ -203,7 +116,7 @@ bin/slimnode init --config ~/.slimnode/config.conf
 bin/slimnode mount --config ~/.slimnode/config.conf --foreground
 ```
 
-### 3. Run bitcoind
+### 2. Run bitcoind
 
 With the FUSE mount active, start bitcoind with `-reindex`. This scans all block files through the FUSE layer — downloading them from the archive server — and rebuilds the local block index and chainstate from scratch.
 
