@@ -1,7 +1,7 @@
 package state
 
 import (
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // Event represents a state transition trigger.

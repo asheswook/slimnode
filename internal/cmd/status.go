@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/asheswook/bitcoin-lfn/internal/cache"
-	"github.com/asheswook/bitcoin-lfn/internal/config"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/cache"
+	"github.com/asheswook/bitcoin-slimnode/internal/config"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // StatusCmd implements the `slimnode status` subcommand.

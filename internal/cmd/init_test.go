@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/config"
+	"github.com/asheswook/bitcoin-slimnode/internal/config"
 )
 
 func newTestConfig(localDir, bitcoinDataDir string) *config.Config {

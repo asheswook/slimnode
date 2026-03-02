@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // LocalFilePath returns the absolute path for a local file.

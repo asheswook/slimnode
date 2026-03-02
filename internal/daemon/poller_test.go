@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/remote"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
-	"github.com/asheswook/bitcoin-lfn/internal/testutil"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/remote"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/testutil"
 )
 
 func TestPollerNewFile(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 type manifestFetcher interface {

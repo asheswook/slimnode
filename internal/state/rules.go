@@ -1,6 +1,6 @@
 package state
 
-import "github.com/asheswook/bitcoin-lfn/internal/store"
+import "github.com/asheswook/bitcoin-slimnode/internal/store"
 
 // IsWritable returns true only for ACTIVE files.
 func IsWritable(s store.FileState) bool {

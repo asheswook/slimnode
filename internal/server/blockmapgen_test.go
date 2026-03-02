@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/asheswook/bitcoin-lfn/internal/blockmap"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/blockmap"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 	"github.com/stretchr/testify/require"
 )
 

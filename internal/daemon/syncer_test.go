@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 type mockS3 struct {

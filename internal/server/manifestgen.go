@@ -16,7 +16,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 // ManifestOption configures manifest generation behavior.

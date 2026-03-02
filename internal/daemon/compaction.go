@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // CompactTrigger controls how compaction is triggered.

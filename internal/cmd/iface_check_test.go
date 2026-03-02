@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"github.com/asheswook/bitcoin-lfn/internal/remote"
+	"github.com/asheswook/bitcoin-slimnode/internal/remote"
 )
 
 var _ manifestFetcher = (*remote.HTTPClient)(nil)

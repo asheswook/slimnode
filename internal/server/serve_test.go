@@ -17,8 +17,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 func startTestFileServer(t *testing.T, blocksDir, manifestPath, blockmapDir, snapshotDir string) (string, context.CancelFunc) {

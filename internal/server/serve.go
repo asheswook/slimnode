@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 // FileServer serves block files and manifests over HTTP.

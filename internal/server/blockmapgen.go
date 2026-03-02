@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/asheswook/bitcoin-lfn/internal/blockmap"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/blockmap"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // GenerateBlockmaps scans blocksDir for finalized blk files and generates binary

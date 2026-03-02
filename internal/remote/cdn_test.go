@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/testutil"
+	"github.com/asheswook/bitcoin-slimnode/internal/testutil"
 )
 
 func newCDNClient(t *testing.T, baseURL string) *CDNClient {

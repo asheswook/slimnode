@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/server"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/server"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 func TestManifestGeneration(t *testing.T) {

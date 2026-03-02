@@ -8,11 +8,11 @@ import (
 	"github.com/hanwen/go-fuse/v2/fuse"
 	"golang.org/x/sync/singleflight"
 
-	"github.com/asheswook/bitcoin-lfn/internal/blockcache"
-	"github.com/asheswook/bitcoin-lfn/internal/blockmap"
-	"github.com/asheswook/bitcoin-lfn/internal/cache"
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/blockcache"
+	"github.com/asheswook/bitcoin-slimnode/internal/blockmap"
+	"github.com/asheswook/bitcoin-slimnode/internal/cache"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // FS is the SlimNode FUSE filesystem.

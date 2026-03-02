@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/server"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/server"
 )
 
 // Syncer periodically scans for new finalized block files and uploads them to S3,

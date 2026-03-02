@@ -7,7 +7,7 @@ import (
 
 	"github.com/jessevdk/go-flags"
 
-	"github.com/asheswook/bitcoin-lfn/internal/cmd"
+	"github.com/asheswook/bitcoin-slimnode/internal/cmd"
 )
 
 type options struct {

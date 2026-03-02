@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // DiskCache implements the Cache interface using local disk storage.

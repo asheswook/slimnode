@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/testutil"
+	"github.com/asheswook/bitcoin-slimnode/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

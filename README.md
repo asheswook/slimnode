@@ -75,8 +75,8 @@ sudo dnf install fuse3
 ## Build
 
 ```bash
-git clone https://github.com/asheswook/bitcoin-lfn.git
-cd bitcoin-lfn
+git clone https://github.com/asheswook/bitcoin-slimnode.git
+cd bitcoin-slimnode
 make build
 
 # Binaries:

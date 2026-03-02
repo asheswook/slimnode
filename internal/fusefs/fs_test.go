@@ -4,8 +4,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/asheswook/bitcoin-lfn/internal/blockmap"
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/blockmap"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/asheswook/bitcoin-lfn/internal/s3"
+	"github.com/asheswook/bitcoin-slimnode/internal/s3"
 )
 
 type listBucketResult struct {

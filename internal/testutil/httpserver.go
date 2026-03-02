@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	mfst "github.com/asheswook/bitcoin-lfn/internal/manifest"
+	mfst "github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 // NewTestServer creates a test HTTP server with manifest and file endpoints.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 // ManifestFetcher is the interface for fetching the server manifest.

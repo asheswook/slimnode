@@ -16,10 +16,10 @@ import (
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
 
-	"github.com/asheswook/bitcoin-lfn/internal/blockmap"
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/remote"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/blockmap"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/remote"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 var _ fs.FileReader = (*FileHandle)(nil)

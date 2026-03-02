@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 // HTTPClient fetches files and manifests from the archive server over HTTP.

@@ -10,10 +10,10 @@ import (
 
 	flags "github.com/jessevdk/go-flags"
 
-	"github.com/asheswook/bitcoin-lfn/internal/daemon"
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	s3pkg "github.com/asheswook/bitcoin-lfn/internal/s3"
-	"github.com/asheswook/bitcoin-lfn/internal/server"
+	"github.com/asheswook/bitcoin-slimnode/internal/daemon"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	s3pkg "github.com/asheswook/bitcoin-slimnode/internal/s3"
+	"github.com/asheswook/bitcoin-slimnode/internal/server"
 )
 
 type ManifestGenCmd struct {

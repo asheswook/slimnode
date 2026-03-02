@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/cache"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/cache"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // CacheStats holds a snapshot of cache manager state.

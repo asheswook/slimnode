@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/config"
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/remote"
-	"github.com/asheswook/bitcoin-lfn/internal/server"
+	"github.com/asheswook/bitcoin-slimnode/internal/config"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/remote"
+	"github.com/asheswook/bitcoin-slimnode/internal/server"
 )
 
 // InitCmd implements the `slimnode init` subcommand.

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	mfst "github.com/asheswook/bitcoin-lfn/internal/manifest"
+	mfst "github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 func TestHealthEndpoint(t *testing.T) {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
 // CDNClient fetches files from a CDN base URL using standard HTTP GET.

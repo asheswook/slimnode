@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/asheswook/bitcoin-lfn/internal/cache"
-	"github.com/asheswook/bitcoin-lfn/internal/config"
-	"github.com/asheswook/bitcoin-lfn/internal/daemon"
-	"github.com/asheswook/bitcoin-lfn/internal/manifest"
-	"github.com/asheswook/bitcoin-lfn/internal/remote"
-	"github.com/asheswook/bitcoin-lfn/internal/store"
+	"github.com/asheswook/bitcoin-slimnode/internal/cache"
+	"github.com/asheswook/bitcoin-slimnode/internal/config"
+	"github.com/asheswook/bitcoin-slimnode/internal/daemon"
+	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/remote"
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // CompactCmd implements the `slimnode compact` subcommand.
