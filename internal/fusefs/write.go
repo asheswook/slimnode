@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -30,15 +31,18 @@ type WriteHandle struct {
 func (h *WriteHandle) Write(ctx context.Context, data []byte, off int64) (uint32, syscall.Errno) {
 	entry, err := h.fs.st.GetFile(h.filename)
 	if err != nil {
+		slog.Warn("FUSE write: file not found in store", "op", "Write", "file", h.filename, "err", err)
 		return 0, syscall.ENOENT
 	}
 
 	if !state.IsWritable(entry.State) {
+		slog.Warn("FUSE write: file not writable", "op", "Write", "file", h.filename, "state", entry.State)
 		return 0, syscall.EACCES
 	}
 
 	n, err := h.file.WriteAt(data, off)
 	if err != nil {
+		slog.Error("FUSE write: WriteAt failed", "op", "Write", "file", h.filename, "offset", off, "len", len(data), "err", err)
 		return 0, syscall.EIO
 	}
 
@@ -57,10 +61,12 @@ func (h *WriteHandle) Write(ctx context.Context, data []byte, off int64) (uint32
 func (h *WriteHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno {
 	entry, err := h.fs.st.GetFile(h.filename)
 	if err != nil {
+		slog.Warn("FUSE fsync: file not found in store", "op", "Fsync", "file", h.filename, "err", err)
 		return fs.OK
 	}
 	if entry.State == store.FileStateActive {
 		if err := h.file.Sync(); err != nil {
+			slog.Error("FUSE fsync: sync failed", "op", "Fsync", "file", h.filename, "err", err)
 			return syscall.EIO
 		}
 	}
@@ -71,11 +77,13 @@ func (h *WriteHandle) finalize(entry *store.FileEntry) {
 	path := filepath.Join(h.fs.localDir, h.filename)
 	sha, err := fileSHA256(path)
 	if err != nil {
+		slog.Warn("finalize: SHA256 computation failed", "op", "finalize", "file", h.filename, "err", err)
 		return
 	}
 
 	info, err := os.Stat(path)
 	if err != nil {
+		slog.Warn("finalize: stat failed", "op", "finalize", "file", h.filename, "err", err)
 		return
 	}
 
@@ -83,7 +91,9 @@ func (h *WriteHandle) finalize(entry *store.FileEntry) {
 	entry.SHA256 = sha
 	entry.Size = info.Size()
 	entry.LastAccess = time.Now()
-	_ = h.fs.st.UpsertFile(entry)
+	if err := h.fs.st.UpsertFile(entry); err != nil {
+		slog.Warn("finalize: store update failed", "op", "finalize", "file", h.filename, "err", err)
+	}
 
 	select {
 	case h.fs.finCh <- h.filename:

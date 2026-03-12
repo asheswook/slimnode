@@ -2,6 +2,7 @@ package fusefs
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -93,6 +94,7 @@ func (n *FileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint3
 		path := filepath.Join(n.fs.localDir, n.filename)
 		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
+			slog.Error("FUSE open: failed to open active file", "op", "Open", "file", n.filename, "err", err)
 			return nil, 0, syscall.EIO
 		}
 		wh := &WriteHandle{fs: n.fs, filename: n.filename, file: f}

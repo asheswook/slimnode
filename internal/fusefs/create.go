@@ -2,6 +2,7 @@ package fusefs
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -19,6 +20,7 @@ func (r *RootNode) Create(ctx context.Context, name string, flags uint32, mode u
 	path := filepath.Join(r.fs.localDir, name)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|int(flags)&^os.O_EXCL, os.FileMode(mode))
 	if err != nil {
+		slog.Error("FUSE create: file creation failed", "op", "Create", "file", name, "err", err)
 		return nil, nil, 0, syscall.EIO
 	}
 
@@ -32,6 +34,7 @@ func (r *RootNode) Create(ctx context.Context, name string, flags uint32, mode u
 	}
 	if err := r.fs.st.UpsertFile(entry); err != nil {
 		f.Close()
+		slog.Error("FUSE create: store upsert failed", "op", "Create", "file", name, "err", err)
 		return nil, nil, 0, syscall.EIO
 	}
 
