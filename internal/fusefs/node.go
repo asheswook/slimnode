@@ -83,8 +83,8 @@ func (n *FileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint3
 
 	switch entry.State {
 	case store.FileStateCached, store.FileStateLocalFinalized:
-		if isRevFile(n.filename) && (flags&(syscall.O_WRONLY|syscall.O_RDWR)) != 0 {
-			return &NullWriteHandle{fs: n.fs, filename: n.filename}, 0, fs.OK
+		if (flags & (syscall.O_WRONLY | syscall.O_RDWR)) != 0 {
+			return &NullWriteHandle{fs: n.fs, filename: n.filename}, fuse.FOPEN_KEEP_CACHE, fs.OK
 		}
 		fh := &FileHandle{fs: n.fs, filename: n.filename, state: entry.State}
 		return fh, fuse.FOPEN_KEEP_CACHE, fs.OK
@@ -99,8 +99,8 @@ func (n *FileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint3
 		return wh, 0, fs.OK
 
 	default:
-		if isRevFile(n.filename) && (flags&(syscall.O_WRONLY|syscall.O_RDWR)) != 0 {
-			return &NullWriteHandle{fs: n.fs, filename: n.filename}, 0, fs.OK
+		if (flags & (syscall.O_WRONLY | syscall.O_RDWR)) != 0 {
+			return &NullWriteHandle{fs: n.fs, filename: n.filename}, fuse.FOPEN_KEEP_CACHE, fs.OK
 		}
 		fh := &FileHandle{fs: n.fs, filename: n.filename, state: entry.State}
 		return fh, 0, fs.OK

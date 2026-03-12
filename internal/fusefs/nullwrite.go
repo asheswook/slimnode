@@ -2,8 +2,10 @@ package fusefs
 
 import (
 	"context"
+	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -16,18 +18,28 @@ var _ fs.FileFsyncer = (*NullWriteHandle)(nil)
 var _ fs.FileAllocater = (*NullWriteHandle)(nil)
 var _ fs.FileReleaser = (*NullWriteHandle)(nil)
 
-// NullWriteHandle is a FUSE file handle for REMOTE rev files during -reindex.
-// Write operations are accepted and silently discarded (zero disk usage).
+// NullWriteHandle is a FUSE file handle for non-ACTIVE files opened with
+// write flags. Write operations are accepted and silently discarded.
 // Read operations fetch directly from the remote server via HTTP Range requests.
 // Fsync and Allocate always succeed to prevent bitcoind from aborting.
 type NullWriteHandle struct {
 	fs       *FS
 	filename string
+	logOnce  sync.Once
 }
 
 // Write accepts data and discards it silently. Always returns success so
-// bitcoind does not abort during -reindex when writing rev files.
-func (h *NullWriteHandle) Write(_ context.Context, data []byte, _ int64) (uint32, syscall.Errno) {
+// bitcoind does not abort. The first discarded write per handle is logged
+// at Warn level to aid in detecting unexpected write-to-sealed-file patterns.
+func (h *NullWriteHandle) Write(_ context.Context, data []byte, off int64) (uint32, syscall.Errno) {
+	h.logOnce.Do(func() {
+		slog.Warn("discarding write to non-ACTIVE file",
+			"op", "NullWriteHandle.Write",
+			"file", h.filename,
+			"offset", off,
+			"size", len(data),
+		)
+	})
 	return uint32(len(data)), fs.OK
 }
 

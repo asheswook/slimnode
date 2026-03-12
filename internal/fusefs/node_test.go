@@ -189,9 +189,10 @@ func TestFileNode_Open_RemoteRevWithWriteFlag(t *testing.T) {
 	ca := newMockCache(t.TempDir())
 	testFS := makeTestFS(t, st, ca, newMockRemoteClient(), nil, nil)
 	n := &FileNode{fs: testFS, filename: "rev00000.dat"}
-	fh, _, errno := n.Open(t.Context(), syscall.O_RDWR)
+	fh, flags, errno := n.Open(t.Context(), syscall.O_RDWR)
 	require.Equal(t, syscall.Errno(0), errno)
 	require.NotNil(t, fh)
+	assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
 	_, isNull := fh.(*NullWriteHandle)
 	assert.True(t, isNull)
 }
@@ -202,13 +203,12 @@ func TestFileNode_Open_RemoteBlkWithWriteFlag(t *testing.T) {
 	ca := newMockCache(t.TempDir())
 	testFS := makeTestFS(t, st, ca, newMockRemoteClient(), nil, nil)
 	n := &FileNode{fs: testFS, filename: "blk00000.dat"}
-	fh, _, errno := n.Open(t.Context(), syscall.O_RDWR)
+	fh, flags, errno := n.Open(t.Context(), syscall.O_RDWR)
 	require.Equal(t, syscall.Errno(0), errno)
 	require.NotNil(t, fh)
+	assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
 	_, isNull := fh.(*NullWriteHandle)
-	assert.False(t, isNull)
-	_, isFileHandle := fh.(*FileHandle)
-	assert.True(t, isFileHandle)
+	assert.True(t, isNull, "expected NullWriteHandle for REMOTE blk with write flag")
 }
 
 func TestFileNode_Open_RemoteRevReadOnly(t *testing.T) {
@@ -243,7 +243,7 @@ func TestOpen_CachedRevWithWriteFlag(t *testing.T) {
 			fh, flags, errno := n.Open(t.Context(), tt.flags)
 			require.Equal(t, syscall.Errno(0), errno)
 			require.NotNil(t, fh)
-			assert.Equal(t, uint32(0), flags)
+			assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
 			_, isNull := fh.(*NullWriteHandle)
 			assert.True(t, isNull, "expected NullWriteHandle for CACHED rev with write flag")
 		})
@@ -274,8 +274,8 @@ func TestOpen_CachedBlkWithWriteFlag(t *testing.T) {
 	require.Equal(t, syscall.Errno(0), errno)
 	require.NotNil(t, fh)
 	assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
-	_, isFileHandle := fh.(*FileHandle)
-	assert.True(t, isFileHandle, "expected FileHandle for CACHED blk (only rev gets NullWriteHandle)")
+	_, isNull := fh.(*NullWriteHandle)
+	assert.True(t, isNull, "expected NullWriteHandle for CACHED blk with write flag")
 }
 
 func TestOpen_LocalFinalizedRevWithWriteFlag(t *testing.T) {
@@ -297,7 +297,7 @@ func TestOpen_LocalFinalizedRevWithWriteFlag(t *testing.T) {
 			fh, flags, errno := n.Open(t.Context(), tt.flags)
 			require.Equal(t, syscall.Errno(0), errno)
 			require.NotNil(t, fh)
-			assert.Equal(t, uint32(0), flags)
+			assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
 			_, isNull := fh.(*NullWriteHandle)
 			assert.True(t, isNull, "expected NullWriteHandle for LOCAL_FINALIZED rev with write flag")
 		})
@@ -328,8 +328,8 @@ func TestOpen_LocalFinalizedBlkWithWriteFlag(t *testing.T) {
 	require.Equal(t, syscall.Errno(0), errno)
 	require.NotNil(t, fh)
 	assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
-	_, isFileHandle := fh.(*FileHandle)
-	assert.True(t, isFileHandle, "expected FileHandle for LOCAL_FINALIZED blk (only rev gets NullWriteHandle)")
+	_, isNull := fh.(*NullWriteHandle)
+	assert.True(t, isNull, "expected NullWriteHandle for LOCAL_FINALIZED blk with write flag")
 }
 
 func TestFileNode_Setattr_TruncateRemoteRev(t *testing.T) {
