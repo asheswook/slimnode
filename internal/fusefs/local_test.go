@@ -29,82 +29,29 @@ func TestScanLocalFiles_NotExist(t *testing.T) {
 	assert.Nil(t, entries)
 }
 
-func TestScanLocalFiles_ActiveAndFinalized(t *testing.T) {
+func TestScanLocalFiles_AllLocalFilesAreActive(t *testing.T) {
 	dir := t.TempDir()
 
-	// blk00005 is the highest-numbered blk → no successor → ACTIVE
-	activeFile := filepath.Join(dir, "blk00005.dat")
-	require.NoError(t, os.WriteFile(activeFile, make([]byte, 1024), 0644))
+	// Small file
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "blk00005.dat"), make([]byte, 1024), 0644))
 
-	// blk00000 is 128 MiB → finalized via size fallback (no successor needed)
-	finalizedFile := filepath.Join(dir, "blk00000.dat")
-	f, err := os.Create(finalizedFile)
+	// Large file (128 MiB) — still ACTIVE at startup, runtime handles finalization
+	f, err := os.Create(filepath.Join(dir, "blk00000.dat"))
 	require.NoError(t, err)
 	require.NoError(t, f.Truncate(store.MaxBlockFileSize))
 	f.Close()
 
-	entries, err := ScanLocalFiles(dir)
-	require.NoError(t, err)
-	require.Len(t, entries, 2)
-
-	byName := make(map[string]store.FileEntry)
-	for _, e := range entries {
-		byName[e.Filename] = e
-	}
-
-	assert.Equal(t, store.FileStateActive, byName["blk00005.dat"].State)
-	assert.Equal(t, store.FileStateLocalFinalized, byName["blk00000.dat"].State)
-	assert.Equal(t, int64(store.MaxBlockFileSize), byName["blk00000.dat"].Size)
-}
-
-func TestScanLocalFiles_SuccessorBasedFinalization(t *testing.T) {
-	dir := t.TempDir()
-
-	// blk00010 has successor blk00011 → finalized (regardless of size)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "blk00010.dat"), make([]byte, 1024), 0644))
-	// blk00011 has no successor → ACTIVE
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "blk00011.dat"), make([]byte, 2048), 0644))
+	// Rev file
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "rev00000.dat"), make([]byte, 512), 0644))
 
 	entries, err := ScanLocalFiles(dir)
 	require.NoError(t, err)
-	require.Len(t, entries, 2)
+	require.Len(t, entries, 3)
 
-	byName := make(map[string]store.FileEntry)
 	for _, e := range entries {
-		byName[e.Filename] = e
+		assert.Equal(t, store.FileStateActive, e.State,
+			"all local files should be ACTIVE at startup: %s", e.Filename)
 	}
-
-	assert.Equal(t, store.FileStateLocalFinalized, byName["blk00010.dat"].State,
-		"blk with successor should be LOCAL_FINALIZED")
-	assert.Equal(t, store.FileStateActive, byName["blk00011.dat"].State,
-		"last blk without successor should be ACTIVE")
-}
-
-func TestScanLocalFiles_RevFollowsBlkState(t *testing.T) {
-	dir := t.TempDir()
-
-	// blk00003 has successor → finalized
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "blk00003.dat"), make([]byte, 1024), 0644))
-	// blk00004 has no successor → active
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "blk00004.dat"), make([]byte, 1024), 0644))
-	// rev00003 should be finalized (matches finalized blk00003)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "rev00003.dat"), make([]byte, 512), 0644))
-	// rev00004 should be active (matches active blk00004)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "rev00004.dat"), make([]byte, 512), 0644))
-
-	entries, err := ScanLocalFiles(dir)
-	require.NoError(t, err)
-	require.Len(t, entries, 4)
-
-	byName := make(map[string]store.FileEntry)
-	for _, e := range entries {
-		byName[e.Filename] = e
-	}
-
-	assert.Equal(t, store.FileStateLocalFinalized, byName["rev00003.dat"].State,
-		"rev should be finalized when corresponding blk is finalized")
-	assert.Equal(t, store.FileStateActive, byName["rev00004.dat"].State,
-		"rev should be active when corresponding blk is active")
 }
 
 func TestScanLocalFiles_SkipsNonBlockFiles(t *testing.T) {

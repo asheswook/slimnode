@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -92,7 +93,7 @@ func readPID(pidPath string) (int, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid PID file: %w", err)
 	}
-	if err := syscall.Kill(pid, 0); err != nil {
+	if err := syscall.Kill(pid, 0); err != nil && !errors.Is(err, syscall.EPERM) {
 		return 0, fmt.Errorf("process %d not running: %w", pid, err)
 	}
 	return pid, nil

@@ -17,9 +17,11 @@ func LocalFilePath(localDir, filename string) string {
 }
 
 // ScanLocalFiles scans localDir and returns FileEntry records for blk/rev files.
-// A blk file is finalized when the next sequential blk file exists (indicating
-// Bitcoin Core has moved on) or when its size reaches MaxBlockFileSize (128 MiB).
-// A rev file is finalized when its corresponding blk file is finalized.
+// All local files are classified as ACTIVE. Runtime finalization (triggered when
+// a file reaches MaxBlockFileSize via writes) handles the ACTIVE → LOCAL_FINALIZED
+// transition. Startup classification is intentionally conservative because
+// assumeUTXO interleaves file numbers across two chains, making heuristics
+// like successor-based or size-threshold finalization unsafe.
 // Non-blk/rev files (.lock, xor.dat, etc.) are skipped; they are handled
 // separately by the FUSE layer.
 func ScanLocalFiles(localDir string) ([]store.FileEntry, error) {
@@ -31,15 +33,7 @@ func ScanLocalFiles(localDir string) ([]store.FileEntry, error) {
 		return nil, err
 	}
 
-	type scannedFile struct {
-		name string
-		size int64
-		mod  time.Time
-	}
-
-	blkFiles := make(map[int]scannedFile)
-	revFiles := make(map[int]scannedFile)
-
+	var result []store.FileEntry
 	for _, de := range entries {
 		if de.IsDir() {
 			continue
@@ -55,50 +49,21 @@ func ScanLocalFiles(localDir string) ([]store.FileEntry, error) {
 			continue
 		}
 
-		sf := scannedFile{name: name, size: info.Size(), mod: info.ModTime()}
-		if num, ok := parseBlockFileNumber(name, "blk"); ok {
-			blkFiles[num] = sf
-		} else if num, ok := parseBlockFileNumber(name, "rev"); ok {
-			revFiles[num] = sf
-		}
-	}
-
-	var result []store.FileEntry
-
-	for num, sf := range blkFiles {
-		state := store.FileStateActive
-		_, hasSuccessor := blkFiles[num+1]
-		if hasSuccessor || sf.size >= store.MaxBlockFileSize {
-			state = store.FileStateLocalFinalized
-		}
-		result = append(result, store.FileEntry{
-			Filename:   sf.name,
-			State:      state,
-			Source:     store.FileSourceLocal,
-			Size:       sf.size,
-			CreatedAt:  sf.mod,
-			LastAccess: time.Now(),
-		})
-	}
-
-	for num, sf := range revFiles {
-		state := store.FileStateActive
-		if blk, blkExists := blkFiles[num]; blkExists {
-			_, hasSuccessor := blkFiles[num+1]
-			if hasSuccessor || blk.size >= store.MaxBlockFileSize {
-				state = store.FileStateLocalFinalized
+		if _, ok := parseBlockFileNumber(name, "blk"); !ok {
+			if _, ok := parseBlockFileNumber(name, "rev"); !ok {
+				continue
 			}
 		}
+
 		result = append(result, store.FileEntry{
-			Filename:   sf.name,
-			State:      state,
+			Filename:   name,
+			State:      store.FileStateActive,
 			Source:     store.FileSourceLocal,
-			Size:       sf.size,
-			CreatedAt:  sf.mod,
+			Size:       info.Size(),
+			CreatedAt:  info.ModTime(),
 			LastAccess: time.Now(),
 		})
 	}
-
 	return result, nil
 }
 
