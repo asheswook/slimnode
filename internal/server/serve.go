@@ -42,6 +42,7 @@ type FileServer struct {
 	mu             sync.RWMutex
 	manifestJSON   []byte
 	manifestETag   string
+	fileHashes     map[string]string // filename → SHA-256, loaded from manifest
 	snapshotHashes map[string]string // filename → SHA-256, loaded from manifest
 }
 
@@ -107,9 +108,17 @@ func (s *FileServer) loadManifest() error {
 		hashes[name] = m.Snapshots.UTXO.SHA256
 	}
 
+	fileH := make(map[string]string, len(m.Files))
+	for _, f := range m.Files {
+		if f.SHA256 != "" {
+			fileH[f.Name] = f.SHA256
+		}
+	}
+
 	s.mu.Lock()
 	s.manifestJSON = data
 	s.manifestETag = etag
+	s.fileHashes = fileH
 	s.snapshotHashes = hashes
 	s.mu.Unlock()
 
@@ -300,18 +309,26 @@ func (s *FileServer) handleFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		s.logger.Error("hash file", "file", filename, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("X-SHA256", hex.EncodeToString(h.Sum(nil)))
+	s.mu.RLock()
+	cachedHash := s.fileHashes[filename]
+	s.mu.RUnlock()
 
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		s.logger.Error("seek file", "file", filename, "err", err)
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+	if cachedHash != "" {
+		w.Header().Set("X-SHA256", cachedHash)
+	} else {
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			s.logger.Error("hash file", "file", filename, "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("X-SHA256", hex.EncodeToString(h.Sum(nil)))
+
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			s.logger.Error("seek file", "file", filename, "err", err)
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	http.ServeContent(w, r, filename, info.ModTime(), f)
