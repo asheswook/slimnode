@@ -4,11 +4,11 @@ Bitcoin full node with ~72% storage reduction. Run bitcoind with ~255 GB instead
 
 ## Why SlimNode
 
-A Bitcoin full node accumulates ~920 GB of block data, growing by ~9 GB per month. About 720 GB of this is `blk*.dat` files — raw block data written once and almost never read again. Once a block file reaches 128 MB and is sealed, it never changes.
+A Bitcoin full node accumulates ~920 GB of block data, growing by ~9 GB per month. About 720 GB of this is `blk*.dat` files - raw block data written once and almost never read again. Once a block file reaches 128 MB and is sealed, it never changes.
 
 SlimNode treats historical block files as what they are: immutable, rarely-accessed archives. They live on an archive server and are fetched on demand via FUSE. Only recently-written active files stay local.
 
-**Full validation.** Every transaction, every signature, every block — validated by bitcoind itself, exactly as on a standard node. SlimNode changes *where* block data is stored, not *how* it is validated.
+**Full validation.** Every transaction, every signature, every block - validated by bitcoind itself, exactly as on a standard node. SlimNode changes *where* block data is stored, not *how* it is validated.
 
 **No Bitcoin Core modifications.** Bitcoin Core already supports `-blocksdir` to separate block files from other data. SlimNode mounts a FUSE filesystem at that path. bitcoind cannot tell the difference.
 
@@ -21,13 +21,13 @@ For the full design rationale, trust model, privacy considerations, and Q&A, see
 ## How It Works
 
 ```
-┌──────────────┐         ┌──────────────────┐         ┌──────────────┐
-│  bitcoind    │  reads  │  slimnode mount  │  HTTP   │  SlimNode    │
-│              │ ──────> │  (FUSE)          │ ──────> │  server      │
-│ -blocksdir=  │         │                  │         │              │
-│  /mnt/blocks │         │  local cache +   │         │  (public or  │
+┌──────────────┐         ┌──────────────────┐         ┌───────────────┐
+│  bitcoind    │  reads  │  slimnode mount  │  HTTP   │  SlimNode     │
+│              │ ──────> │  (FUSE)          │ ──────> │  server       │
+│ -blocksdir=  │         │                  │         │               │
+│  /mnt/blocks │         │  local cache +   │         │  (public or   │
 │ -blocksxor=0 │         │  remote fetch    │         │  self-hosted) │
-└──────────────┘         └──────────────────┘         └──────────────┘
+└──────────────┘         └──────────────────┘         └───────────────┘
 ```
 
 - **Active blocks** (recently written by bitcoind): stored locally as normal files
@@ -83,8 +83,8 @@ server.request-timeout = 30s
 server.retry-count = 3
 
 [cache]
-cache.max-size-gb = 50
-cache.min-keep-recent = 10
+cache.max-size-gb = 2
+cache.min-keep-recent = 5
 
 [compaction]
 compaction.trigger = auto
@@ -101,7 +101,7 @@ sudo chown $USER:$USER /mnt/bitcoin-blocks
 mkdir -p ~/.slimnode/local/index
 
 # Initialize: downloads manifest and blockmaps,
-# creates symlink: ~/.bitcoin/blocks/index → ~/.slimnode/local/index
+# creates symlink: ~/.bitcoin/blocks/index -> ~/.slimnode/local/index
 slimnode init --config ~/.slimnode/config.conf
 
 # Mount the FUSE filesystem (runs as background daemon)
@@ -110,7 +110,7 @@ slimnode mount --config ~/.slimnode/config.conf --background
 
 ### 3. Run bitcoind
 
-With the FUSE mount active, start bitcoind with `-reindex`. This scans all block files through the FUSE layer — downloading them from the archive server — and rebuilds the local block index and chainstate from scratch.
+With the FUSE mount active, start bitcoind with `-reindex`. This scans all block files through the FUSE layer - downloading them from the archive server - and rebuilds the local block index and chainstate from scratch.
 
 ```bash
 bitcoind \
@@ -118,9 +118,11 @@ bitcoind \
   -blocksxor=0 \
   -reindex \
   -datadir=~/.bitcoin
+```
 
-> **Expected time:** Downloading ~720 GB through FUSE typically takes 3–14 days depending on network speed. CPU-bound chainstate validation adds additional time on top of that. This is a one-time cost.
+> **Expected time:** Reindex downloads ~720 GB of block data through FUSE. The time depends on both **bandwidth** (total data volume) and **server latency** (each block file triggers HTTP requests). Typical range: 3–14 days. CPU-bound chainstate validation adds additional time on top of that. This is a one-time cost.
 
+```
 Once reindex completes, restart bitcoind normally:
 
 ```bash
@@ -167,7 +169,7 @@ Full configuration options, CLI commands, storage layout, manifest management, a
 
 SlimNode is under active development. Issues, bug reports, and pull requests are welcome.
 
-Before contributing code, please open an issue to discuss the change. This is an experimental project — major components may shift.
+Before contributing code, please open an issue to discuss the change. This is an experimental project - major components may shift.
 
 ```bash
 # Run tests
@@ -182,4 +184,4 @@ make lint
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).
