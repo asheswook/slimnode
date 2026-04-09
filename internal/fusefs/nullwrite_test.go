@@ -56,7 +56,7 @@ func TestNullWriteHandle_Fsync(t *testing.T) {
 
 // ============================================================================
 // TestNullWriteHandle_Fallocate
-// (calls Allocate — the go-fuse FileAllocater method — named "Fallocate" for
+// (calls Allocate - the go-fuse FileAllocater method - named "Fallocate" for
 //
 //	test-filter compatibility with -run TestNullWrite)
 //

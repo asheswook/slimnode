@@ -105,7 +105,7 @@ func (c *InitCmd) Execute(args []string) error {
 		}
 	}
 
-	// Create blocks/index symlink: <bitcoin-datadir>/blocks/index → <local-dir>/index
+	// Create blocks/index symlink: <bitcoin-datadir>/blocks/index -> <local-dir>/index
 	// bitcoind always reads blocks/index from <datadir>/blocks/index/ regardless of -blocksdir.
 	if err := ensureBlocksIndexSymlink(cfg); err != nil {
 		slog.Warn("blocks/index symlink creation failed", "err", err)
@@ -141,18 +141,18 @@ func ensureBlocksIndexSymlink(cfg *config.Config) error {
 				return fmt.Errorf("reading existing symlink: %w", err)
 			}
 			if target == source {
-				fmt.Printf("blocks/index symlink already exists: %s → %s\n", linkPath, source)
+				fmt.Printf("blocks/index symlink already exists: %s -> %s\n", linkPath, source)
 				return nil
 			}
-			return fmt.Errorf("symlink %s already points to %s (expected %s) — remove it manually to fix", linkPath, target, source)
+			return fmt.Errorf("symlink %s already points to %s (expected %s) - remove it manually to fix", linkPath, target, source)
 		}
-		return fmt.Errorf("%s already exists and is not a symlink — back it up and remove it to proceed", linkPath)
+		return fmt.Errorf("%s already exists and is not a symlink - back it up and remove it to proceed", linkPath)
 	}
 
 	if err := os.Symlink(source, linkPath); err != nil {
 		return fmt.Errorf("creating symlink: %w", err)
 	}
-	fmt.Printf("Created blocks/index symlink: %s → %s\n", linkPath, source)
+	fmt.Printf("Created blocks/index symlink: %s -> %s\n", linkPath, source)
 	return nil
 }
 
@@ -175,7 +175,7 @@ func downloadBlocksIndex(ctx context.Context, rc snapshotFetcher, cfg *config.Co
 	}
 	tmpFile.Close()
 
-	// Extract to LocalDir/index/ — FUSE exposes this via loopback
+	// Extract to LocalDir/index/ - FUSE exposes this via loopback
 	destDir := filepath.Join(cfg.General.LocalDir, "index")
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return fmt.Errorf("create index dir: %w", err)

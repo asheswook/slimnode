@@ -24,11 +24,11 @@ import (
 // FileServer serves block files and manifests over HTTP.
 // It implements the API contract expected by the slimnode remote client:
 //
-//	GET /v1/health       → {"status":"ok"}
-//	GET /v1/manifest     → manifest JSON with ETag support
-//	GET /v1/file/{name}  → file content with X-SHA256 header and Range support
-//	GET /v1/blockmap/{name} → blockmap file content (binary)
-//	GET /v1/snapshot/{name} → snapshot file content with X-SHA256 header
+//	GET /v1/health       -> {"status":"ok"}
+//	GET /v1/manifest     -> manifest JSON with ETag support
+//	GET /v1/file/{name}  -> file content with X-SHA256 header and Range support
+//	GET /v1/blockmap/{name} -> blockmap file content (binary)
+//	GET /v1/snapshot/{name} -> snapshot file content with X-SHA256 header
 type FileServer struct {
 	blocksDir    string
 	manifestPath string
@@ -42,8 +42,8 @@ type FileServer struct {
 	mu             sync.RWMutex
 	manifestJSON   []byte
 	manifestETag   string
-	fileHashes     map[string]string // filename → SHA-256, loaded from manifest
-	snapshotHashes map[string]string // filename → SHA-256, loaded from manifest
+	fileHashes     map[string]string // filename -> SHA-256, loaded from manifest
+	snapshotHashes map[string]string // filename -> SHA-256, loaded from manifest
 }
 
 // FileServerOption configures FileServer behaviour.

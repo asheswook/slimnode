@@ -64,7 +64,7 @@ func (c *HTTPClient) FetchFile(ctx context.Context, filename string, dest io.Wri
 
 	expectedHash := resp.Header.Get("X-SHA256")
 
-	// Stream and compute SHA-256 simultaneously via TeeReader — no full-file buffering.
+	// Stream and compute SHA-256 simultaneously via TeeReader - no full-file buffering.
 	h := sha256.New()
 	tee := io.TeeReader(resp.Body, h)
 	if _, err := io.Copy(dest, tee); err != nil {
@@ -181,7 +181,7 @@ func (c *HTTPClient) FetchBlockmap(ctx context.Context, filename string) ([]byte
 // FetchBlock fetches a specific byte range of a file from /v1/file/{filename} using an HTTP Range header.
 // Returns ErrFileNotFound if the server responds with 404.
 // Accepts both 206 Partial Content and 200 OK responses.
-// No hash verification is done here — the caller handles it.
+// No hash verification is done here - the caller handles it.
 func (c *HTTPClient) FetchBlock(ctx context.Context, filename string, offset, length int64) ([]byte, error) {
 	url := c.baseURL + "/v1/file/" + filename
 

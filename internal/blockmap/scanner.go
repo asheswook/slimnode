@@ -13,7 +13,8 @@ import (
 // entire file into memory.
 //
 // networkMagic must match the 4-byte LE magic at the start of each preamble.
-// Mainnet: 0xD9B4BEF9, testnet3: 0x0709110B, signet: 0x40CF030A.
+// Mainnet: 0xD9B4BEF9, testnet3: 0x0709110B, signet: 0x40CF030A,
+// regtest: 0xDAB5BFFA, testnet4: 0x283F161C.
 //
 // Returns an empty Blockmap (no error) for an empty file.
 // Returns an error for invalid magic bytes or truncated data.

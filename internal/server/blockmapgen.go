@@ -11,7 +11,7 @@ import (
 )
 
 // GenerateBlockmaps scans blocksDir for finalized blk files and generates binary
-// blockmap files in outputDir. Returns a map of filename→sha256hex pairs.
+// blockmap files in outputDir. Returns a map of filename->sha256hex pairs.
 // Only finalized files (size >= store.MaxBlockFileSize) are processed.
 // Rev files are skipped entirely.
 func GenerateBlockmaps(blocksDir, outputDir string, networkMagic uint32) (map[string]string, error) {

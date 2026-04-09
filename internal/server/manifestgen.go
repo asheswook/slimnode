@@ -340,7 +340,7 @@ func findLatestSnapshot(dir, prefix string) (string, int64, error) {
 }
 
 // parseHeightFromFilename extracts the block height from snapshot filenames.
-// Expected patterns: blocks-index-880000.tar.zst → 880000, utxo-880000.dat → 880000
+// Expected patterns: blocks-index-880000.tar.zst -> 880000, utxo-880000.dat -> 880000
 func parseHeightFromFilename(name string) int64 {
 	base := name
 	for _, ext := range []string{".tar.zst", ".dat"} {

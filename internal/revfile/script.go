@@ -31,7 +31,7 @@ const nSpecialScripts = 6
 //
 // All other scripts: WriteVarInt(len+6) then raw script bytes.
 func WriteCompressedScript(w io.Writer, script []byte) error {
-	// Case 0x00: P2PKH — OP_DUP OP_HASH160 0x14 [20B] OP_EQUALVERIFY OP_CHECKSIG
+	// Case 0x00: P2PKH - OP_DUP OP_HASH160 0x14 [20B] OP_EQUALVERIFY OP_CHECKSIG
 	if len(script) == 25 &&
 		script[0] == opDUP &&
 		script[1] == opHASH160 &&
@@ -45,7 +45,7 @@ func WriteCompressedScript(w io.Writer, script []byte) error {
 		return err
 	}
 
-	// Case 0x01: P2SH — OP_HASH160 0x14 [20B] OP_EQUAL
+	// Case 0x01: P2SH - OP_HASH160 0x14 [20B] OP_EQUAL
 	if len(script) == 23 &&
 		script[0] == opHASH160 &&
 		script[1] == 0x14 &&
@@ -57,7 +57,7 @@ func WriteCompressedScript(w io.Writer, script []byte) error {
 		return err
 	}
 
-	// Case 0x02/0x03: P2PK with compressed pubkey — 0x21 [0x02|0x03 + 32B] OP_CHECKSIG
+	// Case 0x02/0x03: P2PK with compressed pubkey - 0x21 [0x02|0x03 + 32B] OP_CHECKSIG
 	if len(script) == 35 &&
 		script[0] == 0x21 &&
 		(script[1] == 0x02 || script[1] == 0x03) &&
@@ -69,7 +69,7 @@ func WriteCompressedScript(w io.Writer, script []byte) error {
 		return err
 	}
 
-	// Case 0x04/0x05: P2PK with uncompressed pubkey — 0x41 [0x04 + 32B x + 32B y] OP_CHECKSIG
+	// Case 0x04/0x05: P2PK with uncompressed pubkey - 0x41 [0x04 + 32B x + 32B y] OP_CHECKSIG
 	if len(script) == 67 &&
 		script[0] == 0x41 &&
 		script[1] == 0x04 &&
@@ -111,7 +111,7 @@ func ReadCompressedScript(r io.Reader) ([]byte, error) {
 	}
 
 	switch nSize {
-	case 0x00: // P2PKH — reconstruct OP_DUP OP_HASH160 0x14 [20B] OP_EQUALVERIFY OP_CHECKSIG
+	case 0x00: // P2PKH - reconstruct OP_DUP OP_HASH160 0x14 [20B] OP_EQUALVERIFY OP_CHECKSIG
 		hash160 := make([]byte, 20)
 		if _, err := io.ReadFull(r, hash160); err != nil {
 			return nil, fmt.Errorf("revfile: read P2PKH hash160: %w", err)
@@ -122,7 +122,7 @@ func ReadCompressedScript(r io.Reader) ([]byte, error) {
 		script = append(script, opEQUALVERIFY, opCHECKSIG)
 		return script, nil
 
-	case 0x01: // P2SH — reconstruct OP_HASH160 0x14 [20B] OP_EQUAL
+	case 0x01: // P2SH - reconstruct OP_HASH160 0x14 [20B] OP_EQUAL
 		hash160 := make([]byte, 20)
 		if _, err := io.ReadFull(r, hash160); err != nil {
 			return nil, fmt.Errorf("revfile: read P2SH hash160: %w", err)
@@ -133,7 +133,7 @@ func ReadCompressedScript(r io.Reader) ([]byte, error) {
 		script = append(script, opEQUAL)
 		return script, nil
 
-	case 0x02, 0x03: // P2PK compressed — reconstruct 0x21 [prefix + 32B] OP_CHECKSIG
+	case 0x02, 0x03: // P2PK compressed - reconstruct 0x21 [prefix + 32B] OP_CHECKSIG
 		xCoord := make([]byte, 32)
 		if _, err := io.ReadFull(r, xCoord); err != nil {
 			return nil, fmt.Errorf("revfile: read P2PK compressed x-coord: %w", err)
@@ -144,7 +144,7 @@ func ReadCompressedScript(r io.Reader) ([]byte, error) {
 		script = append(script, opCHECKSIG)
 		return script, nil
 
-	case 0x04, 0x05: // P2PK uncompressed — return compressed form (no secp256k1 dep)
+	case 0x04, 0x05: // P2PK uncompressed - return compressed form (no secp256k1 dep)
 		xCoord := make([]byte, 32)
 		if _, err := io.ReadFull(r, xCoord); err != nil {
 			return nil, fmt.Errorf("revfile: read P2PK uncompressed x-coord: %w", err)

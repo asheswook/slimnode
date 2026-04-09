@@ -8,10 +8,10 @@ import (
 
 // WriteCompactSize encodes n as Bitcoin CompactSize into w.
 // Encoding rules:
-// - n <= 0xFC → 1 byte: n
-// - 0xFD <= n <= 0xFFFF → 3 bytes: 0xFD + uint16 LE
-// - 0x10000 <= n <= 0xFFFFFFFF → 5 bytes: 0xFE + uint32 LE
-// - n > 0xFFFFFFFF → 9 bytes: 0xFF + uint64 LE
+// - n <= 0xFC -> 1 byte: n
+// - 0xFD <= n <= 0xFFFF -> 3 bytes: 0xFD + uint16 LE
+// - 0x10000 <= n <= 0xFFFFFFFF -> 5 bytes: 0xFE + uint32 LE
+// - n > 0xFFFFFFFF -> 9 bytes: 0xFF + uint64 LE
 func WriteCompactSize(w io.Writer, n uint64) error {
 	if n <= 0xFC {
 		_, err := w.Write([]byte{byte(n)})

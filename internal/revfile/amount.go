@@ -1,7 +1,7 @@
 package revfile
 
 // CompressAmount compresses a satoshi amount using Bitcoin Core's encoding.
-// 0 → 0. Strips trailing decimal zeros up to 9 places.
+// 0 -> 0. Strips trailing decimal zeros up to 9 places.
 func CompressAmount(n uint64) uint64 {
 	if n == 0 {
 		return 0

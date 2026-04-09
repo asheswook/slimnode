@@ -109,7 +109,7 @@ func (n *FileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint3
 
 // Setattr implements fs.NodeSetattrer.
 // For non-ACTIVE files, truncate (FATTR_SIZE) and other attribute changes are
-// silently accepted as a no-op — rev and blk file data for REMOTE, CACHED, and
+// silently accepted as a no-op - rev and blk file data for REMOTE, CACHED, and
 // LOCAL_FINALIZED states is immutable from SlimNode's perspective, so ftruncate
 // during FlushUndoFile has no effect on the stored copy.
 func (n *FileNode) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {

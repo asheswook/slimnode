@@ -21,7 +21,7 @@ import (
 )
 
 // newCDNTestServer creates an httptest server that serves files at flat URLs
-// (baseURL/filename) without X-SHA256 headers — simulating a real CDN.
+// (baseURL/filename) without X-SHA256 headers - simulating a real CDN.
 func newCDNTestServer(t *testing.T, files map[string][]byte, manifestJSON []byte) *httptest.Server {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -105,7 +105,7 @@ func TestCDNClientFetchManifestE2E(t *testing.T) {
 	srv := newCDNTestServer(t, nil, manifestJSON)
 	client := remote.NewCDN(srv.URL, 10*time.Second, 3)
 
-	// First fetch — 200 OK
+	// First fetch - 200 OK
 	got, etag, err := client.FetchManifest(context.Background(), "")
 	require.NoError(t, err)
 	require.NotNil(t, got)
@@ -114,7 +114,7 @@ func TestCDNClientFetchManifestE2E(t *testing.T) {
 	assert.Equal(t, mf.TipHeight, got.TipHeight)
 	assert.NotEmpty(t, etag)
 
-	// Second fetch with ETag — 304 Not Modified
+	// Second fetch with ETag - 304 Not Modified
 	got2, etag2, err := client.FetchManifest(context.Background(), etag)
 	require.NoError(t, err)
 	assert.Nil(t, got2, "should return nil on 304")

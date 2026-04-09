@@ -8,8 +8,8 @@ import (
 
 // InodeForFile returns a stable inode number for a given filename.
 //
-// blk files: 1_000_000 + file number (e.g. blk00100.dat → 1_000_100)
-// rev files: 2_000_000 + file number (e.g. rev00100.dat → 2_000_100)
+// blk files: 1_000_000 + file number (e.g. blk00100.dat -> 1_000_100)
+// rev files: 2_000_000 + file number (e.g. rev00100.dat -> 2_000_100)
 // xor.dat:   3
 // .lock:     4
 // unknown:   hash-based fallback

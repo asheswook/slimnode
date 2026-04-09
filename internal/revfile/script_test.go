@@ -120,7 +120,7 @@ func TestScriptCompressionP2PKUncompressed04(t *testing.T) {
 		xCoord[i] = byte(i + 1)
 		yCoord[i] = byte(i + 2)
 	}
-	yCoord[31] = 0x02 // even y → nSize 0x04
+	yCoord[31] = 0x02 // even y -> nSize 0x04
 
 	p2pk := []byte{0x41, 0x04}
 	p2pk = append(p2pk, xCoord...)
@@ -144,7 +144,7 @@ func TestScriptCompressionP2PKUncompressed05(t *testing.T) {
 		xCoord[i] = byte(i + 3)
 		yCoord[i] = byte(i + 4)
 	}
-	yCoord[31] = 0x03 // odd y → nSize 0x05
+	yCoord[31] = 0x03 // odd y -> nSize 0x05
 
 	p2pk := []byte{0x41, 0x04}
 	p2pk = append(p2pk, xCoord...)
@@ -177,7 +177,7 @@ func TestScriptCompressionP2PKUncompressedSyntheticRoundTrip(t *testing.T) {
 }
 
 func TestScriptNonStandard(t *testing.T) {
-	// OP_RETURN + 4 bytes of data — not a special script type
+	// OP_RETURN + 4 bytes of data - not a special script type
 	script := []byte{0x6a, 0x04, 0xde, 0xad, 0xbe, 0xef}
 
 	var buf bytes.Buffer

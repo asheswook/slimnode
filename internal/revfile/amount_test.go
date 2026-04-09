@@ -15,7 +15,7 @@ func TestCompressAmountKnownValues(t *testing.T) {
 		{0, 0},
 		{1, 1},
 		{100000000, 9},            // 1 BTC = 10^8 satoshis
-		{5000000000, 50},          // 50 BTC — standard block reward
+		{5000000000, 50},          // 50 BTC - standard block reward
 		{2100000000000000, 21000000}, // Max supply
 	}
 

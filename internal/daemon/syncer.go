@@ -29,7 +29,7 @@ type Syncer struct {
 	// lastManifest is the most recently generated manifest, used as a hash
 	// cache on the next sync cycle. Finalized block files are immutable, so
 	// SHA-256 hashes remain valid as long as name and size match.
-	// Accessed only from the sync() goroutine — no mutex needed.
+	// Accessed only from the sync() goroutine - no mutex needed.
 	lastManifest *manifest.Manifest
 }
 

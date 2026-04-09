@@ -18,7 +18,7 @@ func LocalFilePath(localDir, filename string) string {
 
 // ScanLocalFiles scans localDir and returns FileEntry records for blk/rev files.
 // All local files are classified as ACTIVE. Runtime finalization (triggered when
-// a file reaches MaxBlockFileSize via writes) handles the ACTIVE → LOCAL_FINALIZED
+// a file reaches MaxBlockFileSize via writes) handles the ACTIVE -> LOCAL_FINALIZED
 // transition. Startup classification is intentionally conservative because
 // assumeUTXO interleaves file numbers across two chains, making heuristics
 // like successor-based or size-threshold finalization unsafe.

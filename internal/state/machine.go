@@ -8,13 +8,13 @@ import (
 type Event string
 
 const (
-	// EventFinalize transitions ACTIVE → LOCAL_FINALIZED when file reaches 128 MiB.
+	// EventFinalize transitions ACTIVE -> LOCAL_FINALIZED when file reaches 128 MiB.
 	EventFinalize Event = "finalize"
-	// EventCacheFetch transitions REMOTE → CACHED when fetched from server.
+	// EventCacheFetch transitions REMOTE -> CACHED when fetched from server.
 	EventCacheFetch Event = "cache_fetch"
-	// EventCacheEvict transitions CACHED → REMOTE on LRU eviction.
+	// EventCacheEvict transitions CACHED -> REMOTE on LRU eviction.
 	EventCacheEvict Event = "cache_evict"
-	// EventCompact transitions LOCAL_FINALIZED → REMOTE after compaction.
+	// EventCompact transitions LOCAL_FINALIZED -> REMOTE after compaction.
 	EventCompact Event = "compact"
 )
 

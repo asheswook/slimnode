@@ -35,7 +35,7 @@ func TestScanLocalFiles_AllLocalFilesAreActive(t *testing.T) {
 	// Small file
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "blk00005.dat"), make([]byte, 1024), 0644))
 
-	// Large file (128 MiB) — still ACTIVE at startup, runtime handles finalization
+	// Large file (128 MiB) - still ACTIVE at startup, runtime handles finalization
 	f, err := os.Create(filepath.Join(dir, "blk00000.dat"))
 	require.NoError(t, err)
 	require.NoError(t, f.Truncate(store.MaxBlockFileSize))

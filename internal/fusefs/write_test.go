@@ -87,7 +87,7 @@ func TestFsync_NonActiveFile(t *testing.T) {
 	st.files["blk00001.dat"] = &store.FileEntry{Filename: "blk00001.dat", State: store.FileStateCached}
 	h, _ := makeWriteHandle(t, st, "blk00001.dat")
 	errno := h.Fsync(t.Context(), 0)
-	// Non-ACTIVE → no-op, should return OK
+	// Non-ACTIVE -> no-op, should return OK
 	assert.Equal(t, syscall.Errno(0), errno)
 }
 
