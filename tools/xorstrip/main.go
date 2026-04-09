@@ -2,7 +2,7 @@
 //
 // Detects each file's state via network magic bytes (f9beb4d9 for mainnet)
 // and only converts files that are still obfuscated. Safe to re-run after
-// interruption — already-converted files are skipped automatically.
+// interruption - already-converted files are skipped automatically.
 //
 // The --repair flag detects and fixes partially converted files (where
 // xorstrip was interrupted mid-file). It scans each blk file in 8 MiB
@@ -38,6 +38,7 @@ var networkMagics = map[uint32]string{
 	0xD9B4BEF9: "mainnet",
 	0x0709110B: "testnet3",
 	0x40CF030A: "signet",
+	0xDAB5BFFA: "regtest",
 	0x283F161C: "testnet4",
 }
 
@@ -110,7 +111,7 @@ func run(blocksDir, keyHex string, dryRun, repair bool, workers int) error {
 				boundary, ferr := findConversionBoundary(path)
 				if ferr == nil && boundary >= 0 {
 					toRepair = append(toRepair, repairJob{path: path, offset: boundary})
-					fmt.Printf("  [PARTIAL]    %s — raw until %d MiB, XOR'd after\n", name, boundary/(1024*1024))
+					fmt.Printf("  [PARTIAL]    %s - raw until %d MiB, XOR'd after\n", name, boundary/(1024*1024))
 					continue
 				}
 			}
@@ -125,7 +126,7 @@ func run(blocksDir, keyHex string, dryRun, repair bool, workers int) error {
 			}
 		case stateUnknown:
 			unknownCount++
-			fmt.Fprintf(os.Stderr, "  [UNKNOWN]    %s — magic mismatch, skipping\n", name)
+			fmt.Fprintf(os.Stderr, "  [UNKNOWN]    %s - magic mismatch, skipping\n", name)
 		}
 	}
 

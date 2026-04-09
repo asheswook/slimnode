@@ -47,6 +47,23 @@ func (cmd *ManifestGenCmd) Execute(args []string) error {
 	return nil
 }
 
+func chainToNetworkMagic(chain string) (uint32, error) {
+	switch chain {
+	case "mainnet":
+		return 0xD9B4BEF9, nil
+	case "testnet", "testnet3":
+		return 0x0709110B, nil
+	case "signet":
+		return 0x40CF030A, nil
+	case "regtest":
+		return 0xDAB5BFFA, nil
+	case "testnet4":
+		return 0x283F161C, nil
+	default:
+		return 0, fmt.Errorf("unknown chain: %s", chain)
+	}
+}
+
 type BlockmapGenCmd struct {
 	BlocksDir string `long:"blocks-dir" description:"Bitcoin blocks directory" required:"true"`
 	Output    string `long:"output" description:"Output directory for blockmap files" default:"blockmaps/"`
@@ -54,17 +71,9 @@ type BlockmapGenCmd struct {
 }
 
 func (cmd *BlockmapGenCmd) Execute(args []string) error {
-	// Map chain name to network magic
-	var networkMagic uint32
-	switch cmd.Chain {
-	case "mainnet":
-		networkMagic = 0xD9B4BEF9
-	case "testnet", "testnet3":
-		networkMagic = 0x0709110B
-	case "signet":
-		networkMagic = 0x40CF030A
-	default:
-		return fmt.Errorf("unknown chain: %s", cmd.Chain)
+	networkMagic, err := chainToNetworkMagic(cmd.Chain)
+	if err != nil {
+		return err
 	}
 
 	hashes, err := server.GenerateBlockmaps(cmd.BlocksDir, cmd.Output, networkMagic)
