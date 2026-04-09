@@ -48,19 +48,16 @@ func (c *DiskCache) Path(filename string) string {
 }
 
 // Store writes data from r to the cache, verifying SHA-256.
-// Uses atomic write (temp file → rename) to prevent partial writes.
+// Uses atomic write (temp file -> rename) to prevent partial writes.
 func (c *DiskCache) Store(filename string, r io.Reader, expectedSHA256 string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Write to temp file in the same directory (same filesystem → atomic rename)
+	// Write to temp file WITHOUT holding lock - each goroutine uses unique temp file
 	tmp, err := os.CreateTemp(c.dir, filename+".tmp.*")
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
 	tmpName := tmp.Name()
 
-	// Stream r → tmp while computing SHA-256
+	// Stream r -> tmp while computing SHA-256 (no lock: unique temp file, no conflict)
 	h := sha256.New()
 	tee := io.TeeReader(r, h)
 	bytesWritten, err := io.Copy(tmp, tee)
@@ -77,24 +74,29 @@ func (c *DiskCache) Store(filename string, r io.Reader, expectedSHA256 string) e
 		return ErrHashMismatch
 	}
 
-	// Atomic rename
+	// Lock ONLY for the atomic rename + store update (fast operations)
+	c.mu.Lock()
 	dest := filepath.Join(c.dir, filename)
-	if err := os.Rename(tmpName, dest); err != nil {
-		os.Remove(tmpName)
-		return fmt.Errorf("rename to final path: %w", err)
+	renameErr := os.Rename(tmpName, dest)
+	var upsertErr error
+	if renameErr == nil {
+		upsertErr = c.store.UpsertFile(&store.FileEntry{
+			Filename:   filename,
+			State:      store.FileStateCached,
+			Source:     store.FileSourceServer,
+			Size:       bytesWritten,
+			SHA256:     expectedSHA256,
+			CreatedAt:  time.Now(),
+			LastAccess: time.Now(),
+		})
 	}
+	c.mu.Unlock()
 
-	// Update metadata store
-	now := time.Now()
-	return c.store.UpsertFile(&store.FileEntry{
-		Filename:   filename,
-		State:      store.FileStateCached,
-		Source:     store.FileSourceServer,
-		Size:       bytesWritten,
-		SHA256:     expectedSHA256,
-		CreatedAt:  now,
-		LastAccess: now,
-	})
+	if renameErr != nil {
+		os.Remove(tmpName)
+		return fmt.Errorf("rename to final path: %w", renameErr)
+	}
+	return upsertErr
 }
 
 // Remove deletes a cached file and marks it as REMOTE in the store.

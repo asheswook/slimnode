@@ -12,6 +12,7 @@ import (
 
 	"github.com/asheswook/bitcoin-slimnode/internal/blockmap"
 	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
+	"github.com/asheswook/bitcoin-slimnode/internal/remote"
 	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
@@ -90,9 +91,9 @@ func TestReadViaBlockmap_CacheHit(t *testing.T) {
 func TestReadViaBlockmap_CrossBlockRead(t *testing.T) {
 	const filename = "blk00102.dat"
 
-	// Block A: offset 0, BlockDataSize=500 → covers file bytes [0, 508)
+	// Block A: offset 0, BlockDataSize=500 -> covers file bytes [0, 508)
 	entryA, blockBytesA := buildTestBlock(0, 500)
-	// Block B: offset 508, BlockDataSize=1000 → covers file bytes [508, 1516)
+	// Block B: offset 508, BlockDataSize=1000 -> covers file bytes [508, 1516)
 	entryB, blockBytesB := buildTestBlock(508, 1000)
 
 	bc := newMockBlockCache()
@@ -109,8 +110,8 @@ func TestReadViaBlockmap_CrossBlockRead(t *testing.T) {
 	h := makeHandle(fsys, filename, store.FileStateRemote)
 
 	// Read 100 bytes at offset 500: spans [500,600)
-	// Block A covers [500,508) → 8 bytes
-	// Block B covers [508,600) → 92 bytes
+	// Block A covers [500,508) -> 8 bytes
+	// Block B covers [508,600) -> 92 bytes
 	dest := make([]byte, 100)
 	result, errno := h.readViaBlockmap(context.Background(), dest, 500)
 	require.Equal(t, syscall.Errno(0), errno)
@@ -120,8 +121,8 @@ func TestReadViaBlockmap_CrossBlockRead(t *testing.T) {
 
 	// Verify assembly
 	expected := make([]byte, 100)
-	copy(expected[0:8], blockBytesA[500:508])  // srcOffset=500, dstOffset=0
-	copy(expected[8:100], blockBytesB[0:92])   // srcOffset=0, dstOffset=8
+	copy(expected[0:8], blockBytesA[500:508]) // srcOffset=500, dstOffset=0
+	copy(expected[8:100], blockBytesB[0:92])  // srcOffset=0, dstOffset=8
 
 	assert.Equal(t, expected, data, "cross-block assembly must be correct")
 
@@ -153,7 +154,7 @@ func TestRead_NoBc_FallsBackToFullFile(t *testing.T) {
 	cacheDir := t.TempDir()
 	ca := newMockCache(cacheDir)
 
-	// bc = nil → no blockmap path
+	// bc = nil -> no blockmap path
 	fsys := makeTestFS(t, st, ca, rc, nil, nil)
 
 	h := makeHandle(fsys, filename, store.FileStateRemote)
@@ -194,7 +195,7 @@ func TestRead_RevFile_SkipsBlockmap(t *testing.T) {
 	cacheDir := t.TempDir()
 	ca := newMockCache(cacheDir)
 
-	// bc is set, but filename starts with "rev" → blockmap path skipped
+	// bc is set, but filename starts with "rev" -> blockmap path skipped
 	bc := newMockBlockCache()
 	fsys := makeTestFS(t, st, ca, rc, bc, nil)
 
@@ -207,9 +208,10 @@ func TestRead_RevFile_SkipsBlockmap(t *testing.T) {
 	data := readResultBytes(t, result)
 	assert.Equal(t, fileContent, data)
 
-	// Blockmap and FetchBlock must NOT have been called
+	// FetchBlockmap must NOT have been called (blockmap path gated on "blk" prefix)
 	assert.Equal(t, 0, rc.fetchBmCallCount(), "FetchBlockmap must not be called for rev files")
-	assert.Equal(t, 0, rc.fetchBlockCallCount(), "FetchBlock must not be called for rev files")
+	// FetchBlock IS called (range-fetch path), but returns ErrFileNotFound -> falls back to FetchFile
+	assert.Equal(t, 1, rc.fetchBlockCallCount(), "FetchBlock called once via range-fetch before fallback")
 }
 
 // ============================================================================
@@ -333,7 +335,7 @@ func TestGetOrLoadBlockmap_ServerReturns404(t *testing.T) {
 	const filename = "blk00203.dat"
 
 	rc := newMockRemoteClient()
-	// blockmapData does NOT contain filename → FetchBlockmap returns ErrFileNotFound
+	// blockmapData does NOT contain filename -> FetchBlockmap returns ErrFileNotFound
 
 	m := &manifest.Manifest{
 		Files: []manifest.ManifestFile{
@@ -386,17 +388,53 @@ func TestFetchBlock_HashVerification(t *testing.T) {
 }
 
 // ============================================================================
-// Test 11: TestAssembleRead_MultipleBlocks
+// Test 11: TestNoReDownloadOnSecondRead
+// ============================================================================
+
+func TestNoReDownloadOnSecondRead(t *testing.T) {
+	const filename = "rev00500.dat"
+	fileContent := []byte("test-data-for-no-redownload-verification")
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename:  filename,
+		State:     store.FileStateRemote,
+		Source:    store.FileSourceServer,
+		CreatedAt: time.Now(),
+	}))
+
+	rc := newMockRemoteClient()
+	rc.fileData[filename] = fileContent
+
+	ca := newMockCache(t.TempDir())
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+	h := makeHandle(fsys, filename, store.FileStateRemote)
+
+	dest := make([]byte, len(fileContent))
+	result1, errno1 := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno1, "first Read must succeed")
+	assert.Equal(t, fileContent, readResultBytes(t, result1))
+
+	dest2 := make([]byte, len(fileContent))
+	result2, errno2 := h.Read(context.Background(), dest2, 0)
+	require.Equal(t, syscall.Errno(0), errno2, "second Read must succeed")
+	assert.Equal(t, fileContent, readResultBytes(t, result2))
+
+	assert.Equal(t, 1, rc.fetchFileCallCount(), "file should be fetched exactly once across both reads")
+}
+
+// ============================================================================
+// Test 12: TestAssembleRead_MultipleBlocks
 // ============================================================================
 
 func TestAssembleRead_MultipleBlocks(t *testing.T) {
 	const filename = "blk00400.dat"
 
-	// Block A: offset 0, size 200 → covers [0, 208)
+	// Block A: offset 0, size 200 -> covers [0, 208)
 	entryA, blockBytesA := buildTestBlock(0, 200)
-	// Block B: offset 208, size 300 → covers [208, 516)
+	// Block B: offset 208, size 300 -> covers [208, 516)
 	entryB, blockBytesB := buildTestBlock(208, 300)
-	// Block C: offset 516, size 400 → covers [516, 924)
+	// Block C: offset 516, size 400 -> covers [516, 924)
 	entryC, blockBytesC := buildTestBlock(516, 400)
 
 	bc := newMockBlockCache()
@@ -427,4 +465,156 @@ func TestAssembleRead_MultipleBlocks(t *testing.T) {
 	copy(expected[416:600], blockBytesC[0:184])
 
 	assert.Equal(t, expected, dest[:n], "assembled data must match expected multi-block assembly")
+}
+
+// ============================================================================
+// Test 13: TestRemoteFileRangeFetch
+// ============================================================================
+
+func TestRemoteFileRangeFetch(t *testing.T) {
+	const filename = "blk00000.dat"
+	fileData := []byte("hello world from range fetch")
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename: filename,
+		State:    store.FileStateRemote,
+		Source:   store.FileSourceServer,
+		Size:     int64(len(fileData)),
+		SHA256:   "abc",
+	}))
+
+	rc := newMockRemoteClient()
+	rc.blockData["blk00000.dat:0"] = fileData
+
+	ca := newMockCache(t.TempDir())
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+	h := makeHandle(fsys, filename, store.FileStateRemote)
+
+	dest := make([]byte, len(fileData))
+	result, errno := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno, "Read must succeed via range-fetch")
+
+	data := readResultBytes(t, result)
+	assert.Equal(t, fileData, data, "returned data must match what FetchBlock provided")
+
+	assert.Equal(t, 0, rc.fetchFileCallCount(), "FetchFile must NOT be called when range-fetch succeeds")
+	assert.Equal(t, 1, rc.fetchBlockCallCount(), "FetchBlock must be called exactly once")
+}
+
+func TestRemoteFileRead_FileModeSkipsRange(t *testing.T) {
+	const filename = "blk01000.dat"
+	fileData := []byte("full file mode payload")
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename: filename,
+		State:    store.FileStateRemote,
+		Source:   store.FileSourceServer,
+		Size:     int64(len(fileData)),
+		SHA256:   "abc",
+	}))
+
+	rc := newMockRemoteClient()
+	rc.fileData[filename] = fileData
+
+	ca := newMockCache(t.TempDir())
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+	fsys.fetchPolicy = NewFetchPolicy(FetchPolicyConfig{Mode: fetchModeFile})
+	h := makeHandle(fsys, filename, store.FileStateRemote)
+
+	dest := make([]byte, len(fileData))
+	result, errno := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, fileData, readResultBytes(t, result))
+	assert.Equal(t, 1, rc.fetchFileCallCount())
+	assert.Equal(t, 0, rc.fetchBlockCallCount())
+}
+
+func TestRemoteFileRead_AutoPromotesAfterSequentialRanges(t *testing.T) {
+	const filename = "blk01001.dat"
+	const chunkSize = 512 * 1024
+	fileData := make([]byte, chunkSize*3)
+	for i := range fileData {
+		fileData[i] = byte(i)
+	}
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename: filename,
+		State:    store.FileStateRemote,
+		Source:   store.FileSourceServer,
+		Size:     int64(len(fileData)),
+		SHA256:   "abc",
+	}))
+
+	rc := newMockRemoteClient()
+	rc.fileData[filename] = fileData
+	rc.blockData[fmt.Sprintf("%s:%d", filename, int64(0))] = fileData[:chunkSize]
+	rc.blockData[fmt.Sprintf("%s:%d", filename, int64(chunkSize))] = fileData[chunkSize : chunkSize*2]
+
+	ca := newMockCache(t.TempDir())
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+	fsys.fetchPolicy = NewFetchPolicy(FetchPolicyConfig{
+		Mode:                  fetchModeAuto,
+		AutoGapToleranceKB:    64,
+		AutoMinRangeRequests:  2,
+		AutoMinSequentialMB:   1,
+		AutoMinSequentialRate: 0.8,
+		AutoMaxBackwardSeeks:  2,
+		AutoFileHintTTL:       time.Minute,
+		AutoPromotionCooldown: time.Second,
+	})
+	h := makeHandle(fsys, filename, store.FileStateRemote)
+
+	buf1 := make([]byte, chunkSize)
+	res1, err1 := h.Read(context.Background(), buf1, 0)
+	require.Equal(t, syscall.Errno(0), err1)
+	assert.Equal(t, fileData[:chunkSize], readResultBytes(t, res1))
+	assert.Equal(t, 1, rc.fetchBlockCallCount())
+
+	buf2 := make([]byte, chunkSize)
+	res2, err2 := h.Read(context.Background(), buf2, int64(chunkSize))
+	require.Equal(t, syscall.Errno(0), err2)
+	assert.Equal(t, fileData[chunkSize:chunkSize*2], readResultBytes(t, res2))
+	assert.Equal(t, 2, rc.fetchBlockCallCount())
+	require.Equal(t, 0, rc.fetchFileCallCount(), "promotion should only set hint after second sequential read")
+
+	buf3 := make([]byte, chunkSize)
+	res3, err3 := h.Read(context.Background(), buf3, int64(chunkSize*2))
+	require.Equal(t, syscall.Errno(0), err3)
+	assert.Equal(t, fileData[chunkSize*2:chunkSize*3], readResultBytes(t, res3))
+
+	assert.Equal(t, 1, rc.fetchFileCallCount(), "third read should switch to full-file mode")
+	assert.Equal(t, 2, rc.fetchBlockCallCount(), "third read should skip range fetch after promotion")
+}
+
+func TestRemoteFileRead_FileModeFallsBackToRangeOnFetchFileFailure(t *testing.T) {
+	const filename = "blk01002.dat"
+	rangeData := []byte("range fallback data")
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename: filename,
+		State:    store.FileStateRemote,
+		Source:   store.FileSourceServer,
+		Size:     int64(len(rangeData)),
+		SHA256:   "abc",
+	}))
+
+	rc := newMockRemoteClient()
+	rc.forceFetchFileErr = remote.ErrFileNotFound
+	rc.blockData[fmt.Sprintf("%s:%d", filename, int64(0))] = rangeData
+
+	ca := newMockCache(t.TempDir())
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+	fsys.fetchPolicy = NewFetchPolicy(FetchPolicyConfig{Mode: fetchModeFile})
+	h := makeHandle(fsys, filename, store.FileStateRemote)
+
+	dest := make([]byte, len(rangeData))
+	result, errno := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, rangeData, readResultBytes(t, result))
+	assert.Equal(t, 1, rc.fetchFileCallCount())
+	assert.Equal(t, 1, rc.fetchBlockCallCount())
 }

@@ -26,12 +26,12 @@ import (
 // ============================================================================
 
 type mockStore struct {
-	mu               sync.RWMutex
-	files            map[string]*store.FileEntry
-	forceGetFileErr  error
-	forceUpsertErr   error
+	mu                  sync.RWMutex
+	files               map[string]*store.FileEntry
+	forceGetFileErr     error
+	forceUpsertErr      error
 	forceUpdateStateErr error
-	forceListErr     error
+	forceListErr        error
 }
 
 func newMockStore() *mockStore {
@@ -74,8 +74,8 @@ func (s *mockStore) ListCachedByLRU(_ int) ([]store.FileEntry, error) {
 }
 
 func (s *mockStore) UpdateLastAccess(_ string, _ time.Time) error { return nil }
-func (s *mockStore) DeleteFile(_ string) error                     { return nil }
-func (s *mockStore) Close() error                                  { return nil }
+func (s *mockStore) DeleteFile(_ string) error                    { return nil }
+func (s *mockStore) Close() error                                 { return nil }
 
 func (s *mockStore) UpsertFile(entry *store.FileEntry) error {
 	if s.forceUpsertErr != nil {
@@ -154,15 +154,16 @@ type fetchBlockCall struct {
 }
 
 type mockRemoteClient struct {
-	mu                   sync.Mutex
-	blockmapData         map[string][]byte // filename → raw blockmap bytes; absent = ErrFileNotFound
-	blockData            map[string][]byte // "filename:offset" → block bytes
-	fileData             map[string][]byte // filename → full file bytes
-	fetchBlockCalls      []fetchBlockCall
-	fetchBmCalls         []string // filenames for which FetchBlockmap was called
-	forceFetchFileErr    error
+	mu                    sync.Mutex
+	blockmapData          map[string][]byte // filename -> raw blockmap bytes; absent = ErrFileNotFound
+	blockData             map[string][]byte // "filename:offset" -> block bytes
+	fileData              map[string][]byte // filename -> full file bytes
+	fetchBlockCalls       []fetchBlockCall
+	fetchBmCalls          []string // filenames for which FetchBlockmap was called
+	fetchFileCalls        []string // filenames for which FetchFile was called
+	forceFetchFileErr     error
 	forceFetchManifestErr error
-	forceFetchBlockErr   error
+	forceFetchBlockErr    error
 }
 
 func newMockRemoteClient() *mockRemoteClient {
@@ -174,9 +175,14 @@ func newMockRemoteClient() *mockRemoteClient {
 }
 
 func (c *mockRemoteClient) FetchFile(_ context.Context, filename string, dest io.Writer) error {
+	c.mu.Lock()
+	c.fetchFileCalls = append(c.fetchFileCalls, filename)
+	c.mu.Unlock()
+
 	if c.forceFetchFileErr != nil {
 		return c.forceFetchFileErr
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	data, ok := c.fileData[filename]
@@ -238,14 +244,20 @@ func (c *mockRemoteClient) fetchBmCallCount() int {
 	return len(c.fetchBmCalls)
 }
 
+func (c *mockRemoteClient) fetchFileCallCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.fetchFileCalls)
+}
+
 // ============================================================================
 // Mock: mockBlockCache
 // ============================================================================
 
 type mockBlockCache struct {
-	mu               sync.RWMutex
-	blocks           map[string][]byte // "filename:offset" → block data
-	forceGetBlockErr error
+	mu                 sync.RWMutex
+	blocks             map[string][]byte // "filename:offset" -> block data
+	forceGetBlockErr   error
 	forceStoreBlockErr error
 }
 
@@ -379,14 +391,16 @@ func buildBlockmapBytes(entries []blockmap.BlockmapEntry) ([]byte, string) {
 func makeTestFS(t *testing.T, st *mockStore, ca *mockCache, rc *mockRemoteClient, bc *mockBlockCache, m *manifest.Manifest) *FS {
 	t.Helper()
 	f := &FS{
-		localDir:   t.TempDir(),
-		st:         st,
-		ca:         ca,
-		rc:         rc,
-		manifest:   m,
-		blockmaps:  make(map[string]*blockmap.Blockmap),
-		noBlockmap: make(map[string]bool),
-		finCh:      make(chan string, 64),
+		localDir:    t.TempDir(),
+		st:          st,
+		ca:          ca,
+		rc:          rc,
+		fetchPolicy: NewFetchPolicy(FetchPolicyConfig{}),
+		manifest:    m,
+		blockmaps:   make(map[string]*blockmap.Blockmap),
+		noBlockmap:  make(map[string]bool),
+		downloadSem: make(chan struct{}, 4),
+		finCh:       make(chan string, 64),
 	}
 	if bc != nil {
 		f.bc = bc

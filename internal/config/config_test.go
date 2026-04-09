@@ -21,6 +21,14 @@ general.cache-dir = ~/.slimnode/cache
 general.local-dir = ~/.slimnode/local
 general.mount-point = /mnt/bitcoin-blocks
 general.log-level = info
+general.remote-fetch-mode = auto
+general.auto-gap-tolerance-kb = 64
+general.auto-min-range-requests = 256
+general.auto-min-sequential-mb = 4
+general.auto-min-sequential-rate = 0.9
+general.auto-max-backward-seeks = 2
+general.auto-file-hint-ttl = 10m
+general.auto-promotion-cooldown = 30s
 
 [cache]
 cache.max-size-gb = 50
@@ -49,6 +57,14 @@ compaction.pre-download = true
 	assert.Equal(t, "mainnet", cfg.General.Chain)
 	assert.Equal(t, "/mnt/bitcoin-blocks", cfg.General.MountPoint)
 	assert.Equal(t, "info", cfg.General.LogLevel)
+	assert.Equal(t, "auto", cfg.General.RemoteFetchMode)
+	assert.Equal(t, 64, cfg.General.AutoGapToleranceKB)
+	assert.Equal(t, 256, cfg.General.AutoMinRangeRequests)
+	assert.Equal(t, 4, cfg.General.AutoMinSequentialMB)
+	assert.Equal(t, 0.9, cfg.General.AutoMinSequentialRate)
+	assert.Equal(t, 2, cfg.General.AutoMaxBackwardSeeks)
+	assert.Equal(t, 10*time.Minute, cfg.General.AutoFileHintTTL)
+	assert.Equal(t, 30*time.Second, cfg.General.AutoPromotionCooldown)
 	assert.Equal(t, 50, cfg.Cache.MaxSizeGB)
 	assert.Equal(t, 10, cfg.Cache.MinKeepRecent)
 	assert.Equal(t, "https://bitcoin-archive.example.com", cfg.Server.URL)
@@ -103,6 +119,14 @@ func TestDefaults(t *testing.T) {
 	// Verify default values are set
 	assert.Equal(t, "mainnet", cfg.General.Chain)
 	assert.Equal(t, "info", cfg.General.LogLevel)
+	assert.Equal(t, "auto", cfg.General.RemoteFetchMode)
+	assert.Equal(t, 64, cfg.General.AutoGapToleranceKB)
+	assert.Equal(t, 256, cfg.General.AutoMinRangeRequests)
+	assert.Equal(t, 4, cfg.General.AutoMinSequentialMB)
+	assert.Equal(t, 0.9, cfg.General.AutoMinSequentialRate)
+	assert.Equal(t, 2, cfg.General.AutoMaxBackwardSeeks)
+	assert.Equal(t, 10*time.Minute, cfg.General.AutoFileHintTTL)
+	assert.Equal(t, 30*time.Second, cfg.General.AutoPromotionCooldown)
 	assert.Equal(t, 50, cfg.Cache.MaxSizeGB)
 	assert.Equal(t, 10, cfg.Cache.MinKeepRecent)
 	assert.Equal(t, 30*time.Second, cfg.Server.RequestTimeout)
@@ -153,3 +177,13 @@ func TestPathExpansion(t *testing.T) {
 	assert.Equal(t, expectedBitcoinDir, cfg.General.BitcoinDataDir)
 }
 
+func TestInvalidRemoteFetchMode(t *testing.T) {
+	args := []string{
+		"--general.mount-point", "/mnt/bitcoin-blocks",
+		"--server.url", "https://bitcoin-archive.example.com",
+		"--general.remote-fetch-mode", "invalid",
+	}
+	_, err := Load(args)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid general.remote-fetch-mode")
+}

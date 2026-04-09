@@ -31,6 +31,7 @@ type FileHandle struct {
 	filename string
 	state    store.FileState
 	special  bool
+	auto     SequentialReadTracker
 }
 
 func (h *FileHandle) Fsync(ctx context.Context, flags uint32) syscall.Errno {
@@ -58,39 +59,108 @@ func (h *FileHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.Rea
 		return result, errno
 
 	case store.FileStateRemote:
+		now := time.Now()
+		autoEnabled := h.fs.fetchPolicy.Mode() == fetchModeAuto
+		mode := h.fs.fetchPolicy.ResolveMode(h.filename, now)
+
+		if mode == fetchModeFile {
+			return h.readRemoteFileMode(ctx, dest, off, now)
+		}
+
 		if h.fs.bc != nil && strings.HasPrefix(h.filename, "blk") {
 			result, errno := h.readViaBlockmap(ctx, dest, off)
 			if errno != syscall.ENODATA {
 				if errno == fs.OK {
+					h.fs.fetchPolicy.ObserveRangeRead(&h.auto, off, len(dest))
 					_ = h.fs.st.UpdateLastAccess(h.filename, time.Now())
+					if autoEnabled && h.fs.fetchPolicy.ShouldPromoteToFile(h.filename, &h.auto, now) {
+						slog.Info("promoting remote file read strategy to full-file",
+							"file", h.filename,
+							"range_requests", h.auto.rangeRequests,
+							"sequential_bytes", h.auto.sequentialBytes,
+							"total_bytes", h.auto.totalBytes,
+						)
+						h.fs.fetchPolicy.MarkPromotionSuccess(h.filename, now)
+					}
 				}
 				return result, errno
 			}
 		}
-		if err := h.fetchAndCache(ctx); err != nil {
-			slog.Error("failed to fetch remote file", "file", h.filename, "err", err)
-			return nil, syscall.EIO
+		// Direct range-fetch: only download the bytes we need.
+		// The server supports HTTP Range via http.ServeContent.
+		// Falls back to full-file download only if the server rejects range requests.
+		if len(dest) > 0 {
+			data, err := h.fs.rc.FetchBlock(context.Background(), h.filename, off, int64(len(dest)))
+			if err == nil {
+				h.fs.fetchPolicy.ObserveRangeRead(&h.auto, off, len(data))
+				_ = h.fs.st.UpdateLastAccess(h.filename, time.Now())
+				if autoEnabled && h.fs.fetchPolicy.ShouldPromoteToFile(h.filename, &h.auto, now) {
+					slog.Info("promoting remote file read strategy to full-file",
+						"file", h.filename,
+						"range_requests", h.auto.rangeRequests,
+						"sequential_bytes", h.auto.sequentialBytes,
+						"total_bytes", h.auto.totalBytes,
+					)
+					h.fs.fetchPolicy.MarkPromotionSuccess(h.filename, now)
+				}
+				return fuse.ReadResultData(data), fs.OK
+			}
+			slog.Warn("range fetch failed, falling back to full file download",
+				"file", h.filename, "off", off, "size", len(dest), "err", err)
 		}
-		result, errno := preadLocal(h.fs.ca.Path(h.filename), dest, off)
-		if errno == fs.OK {
-			_ = h.fs.st.UpdateLastAccess(h.filename, time.Now())
-		}
-		return result, errno
+
+		return h.readRemoteFileMode(ctx, dest, off, now)
 
 	default:
 		return nil, syscall.EIO
 	}
 }
 
+func (h *FileHandle) readRemoteFileMode(ctx context.Context, dest []byte, off int64, now time.Time) (fuse.ReadResult, syscall.Errno) {
+	if err := h.fetchAndCache(ctx); err != nil {
+		h.fs.fetchPolicy.MarkPromotionFailure(h.filename, now)
+		if len(dest) > 0 {
+			data, rangeErr := h.fs.rc.FetchBlock(context.Background(), h.filename, off, int64(len(dest)))
+			if rangeErr == nil {
+				h.fs.fetchPolicy.ObserveRangeRead(&h.auto, off, len(data))
+				_ = h.fs.st.UpdateLastAccess(h.filename, time.Now())
+				return fuse.ReadResultData(data), fs.OK
+			}
+			slog.Warn("full-file fetch failed and range fallback also failed",
+				"file", h.filename, "off", off, "size", len(dest),
+				"full_file_err", err, "range_err", rangeErr)
+		}
+		slog.Error("failed to fetch remote file", "file", h.filename, "err", err)
+		return nil, syscall.EIO
+	}
+	h.state = store.FileStateCached
+	h.fs.fetchPolicy.MarkPromotionSuccess(h.filename, now)
+	result, errno := preadLocal(h.fs.ca.Path(h.filename), dest, off)
+	if errno == fs.OK {
+		_ = h.fs.st.UpdateLastAccess(h.filename, time.Now())
+	}
+	return result, errno
+}
+
 func (h *FileHandle) fetchAndCache(ctx context.Context) error {
+	if existing, err := h.fs.st.GetFile(h.filename); err == nil {
+		if existing.State == store.FileStateCached || existing.State == store.FileStateLocalFinalized {
+			return nil
+		}
+	}
 	_, err, _ := h.fs.downloads.Do(h.filename, func() (interface{}, error) {
 		entry, err := h.fs.st.GetFile(h.filename)
 		if err != nil {
 			return nil, err
 		}
 
+		// Limit concurrent file downloads to prevent OOM.
+		// Each download buffers ~128 MB in memory; cap to 4 concurrent downloads.
+		h.fs.downloadSem <- struct{}{}
+		defer func() { <-h.fs.downloadSem }()
+
 		var buf bytes.Buffer
-		if err := h.fs.rc.FetchFile(ctx, h.filename, &buf); err != nil {
+		if err := h.fs.rc.FetchFile(context.Background(), h.filename, &buf); err != nil {
 			return nil, err
 		}
 
@@ -250,7 +320,7 @@ func (h *FileHandle) fetchBlock(ctx context.Context, entry blockmap.BlockmapEntr
 		}
 
 		fetchLen := int64(8) + int64(entry.BlockDataSize)
-		data, err := h.fs.rc.FetchBlock(ctx, h.filename, entry.FileOffset, fetchLen)
+		data, err := h.fs.rc.FetchBlock(context.Background(), h.filename, entry.FileOffset, fetchLen)
 		if err != nil {
 			return nil, fmt.Errorf("fetch block at %d: %w", entry.FileOffset, err)
 		}

@@ -2,6 +2,8 @@ package fusefs
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -91,7 +93,16 @@ func (r *RootNode) Lookup(ctx context.Context, name string, out *fuse.EntryOut) 
 		mode = 0644
 	}
 
-	out.Attr.Size = uint64(entry.Size)
+	// For ACTIVE files, use the real file size from disk (may grow after initialization).
+	if entry.State == store.FileStateActive {
+		if fi, err := os.Stat(filepath.Join(r.fs.localDir, name)); err == nil {
+			out.Attr.Size = uint64(fi.Size())
+		} else {
+			out.Attr.Size = uint64(entry.Size)
+		}
+	} else {
+		out.Attr.Size = uint64(entry.Size)
+	}
 	out.Attr.Mode = fuse.S_IFREG | mode
 
 	switch entry.State {

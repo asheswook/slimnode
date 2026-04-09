@@ -17,17 +17,19 @@ import (
 
 // FS is the SlimNode FUSE filesystem.
 type FS struct {
-	mountPoint string
-	st         store.Store
-	ca         cache.Cache
-	rc         RemoteClient
-	manifest   *manifest.Manifest
-	localDir   string
-	indexDir   string
-	downloads  singleflight.Group
-	mu         sync.RWMutex
-	finCh      chan string
-	server     *fuse.Server
+	mountPoint  string
+	st          store.Store
+	ca          cache.Cache
+	rc          RemoteClient
+	fetchPolicy *FetchPolicy
+	manifest    *manifest.Manifest
+	localDir    string
+	indexDir    string
+	downloads   singleflight.Group
+	downloadSem chan struct{}
+	mu          sync.RWMutex
+	finCh       chan string
+	server      *fuse.Server
 
 	// Block-level fetch support
 	blockmaps    map[string]*blockmap.Blockmap
@@ -41,10 +43,18 @@ type FS struct {
 }
 
 // New creates a new FS.
-func New(mountPoint, localDir, indexDir string, st store.Store, ca cache.Cache, rc RemoteClient, m *manifest.Manifest, bc blockcache.BlockCache, blockmaps map[string]*blockmap.Blockmap) *FS {
+func New(mountPoint, localDir, indexDir string, st store.Store, ca cache.Cache, rc RemoteClient, m *manifest.Manifest, bc blockcache.BlockCache, blockmaps map[string]*blockmap.Blockmap, fetchPolicies ...*FetchPolicy) *FS {
 	bmField := blockmaps
 	if bmField == nil {
 		bmField = make(map[string]*blockmap.Blockmap)
+	}
+
+	var policy *FetchPolicy
+	if len(fetchPolicies) > 0 {
+		policy = fetchPolicies[0]
+	}
+	if policy == nil {
+		policy = NewFetchPolicy(FetchPolicyConfig{})
 	}
 
 	var loopback fs.InodeEmbedder
@@ -55,14 +65,16 @@ func New(mountPoint, localDir, indexDir string, st store.Store, ca cache.Cache, 
 	return &FS{
 		mountPoint:    mountPoint,
 		localDir:      localDir,
-		indexDir:       indexDir,
+		indexDir:      indexDir,
 		st:            st,
 		ca:            ca,
 		rc:            rc,
+		fetchPolicy:   policy,
 		manifest:      m,
 		bc:            bc,
 		blockmaps:     bmField,
 		noBlockmap:    make(map[string]bool),
+		downloadSem:   make(chan struct{}, 4),
 		finCh:         make(chan string, 64),
 		indexLoopback: loopback,
 	}

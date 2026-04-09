@@ -44,7 +44,7 @@ func Load(args []string) (*Config, error) {
 
 	// Create parser once and reuse it.
 	// IgnoreUnknown: subcommand-specific flags (e.g. --foreground) are passed
-	// via os.Args but don't belong to Config — ignore them here.
+	// via os.Args but don't belong to Config - ignore them here.
 	parser := flags.NewParser(cfg, flags.Default|flags.IgnoreUnknown)
 
 	// Load INI file (so CLI flags can override)
@@ -105,6 +105,30 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Server.URL == "" {
 		return fmt.Errorf("required field missing: server.url")
+	}
+	if cfg.General.RemoteFetchMode != "auto" && cfg.General.RemoteFetchMode != "file" && cfg.General.RemoteFetchMode != "range" {
+		return fmt.Errorf("invalid general.remote-fetch-mode %q: must be one of auto, file, range", cfg.General.RemoteFetchMode)
+	}
+	if cfg.General.AutoGapToleranceKB < 0 {
+		return fmt.Errorf("invalid general.auto-gap-tolerance-kb %d: must be >= 0", cfg.General.AutoGapToleranceKB)
+	}
+	if cfg.General.AutoMinRangeRequests < 1 {
+		return fmt.Errorf("invalid general.auto-min-range-requests %d: must be >= 1", cfg.General.AutoMinRangeRequests)
+	}
+	if cfg.General.AutoMinSequentialMB < 1 {
+		return fmt.Errorf("invalid general.auto-min-sequential-mb %d: must be >= 1", cfg.General.AutoMinSequentialMB)
+	}
+	if cfg.General.AutoMinSequentialRate <= 0 || cfg.General.AutoMinSequentialRate > 1 {
+		return fmt.Errorf("invalid general.auto-min-sequential-rate %f: must be in (0,1]", cfg.General.AutoMinSequentialRate)
+	}
+	if cfg.General.AutoMaxBackwardSeeks < 0 {
+		return fmt.Errorf("invalid general.auto-max-backward-seeks %d: must be >= 0", cfg.General.AutoMaxBackwardSeeks)
+	}
+	if cfg.General.AutoFileHintTTL <= 0 {
+		return fmt.Errorf("invalid general.auto-file-hint-ttl %s: must be > 0", cfg.General.AutoFileHintTTL)
+	}
+	if cfg.General.AutoPromotionCooldown <= 0 {
+		return fmt.Errorf("invalid general.auto-promotion-cooldown %s: must be > 0", cfg.General.AutoPromotionCooldown)
 	}
 	return nil
 }

@@ -129,10 +129,21 @@ func (m *MountCmd) Execute(args []string) error {
 		fileClient = rc
 	}
 
-	fs := fusefs.New(cfg.General.MountPoint, cfg.General.LocalDir, indexDir, st, ca, fileClient, mf, nil, nil)
+	fetchPolicy := fusefs.NewFetchPolicy(fusefs.FetchPolicyConfig{
+		Mode:                  cfg.General.RemoteFetchMode,
+		AutoGapToleranceKB:    cfg.General.AutoGapToleranceKB,
+		AutoMinRangeRequests:  cfg.General.AutoMinRangeRequests,
+		AutoMinSequentialMB:   cfg.General.AutoMinSequentialMB,
+		AutoMinSequentialRate: cfg.General.AutoMinSequentialRate,
+		AutoMaxBackwardSeeks:  cfg.General.AutoMaxBackwardSeeks,
+		AutoFileHintTTL:       cfg.General.AutoFileHintTTL,
+		AutoPromotionCooldown: cfg.General.AutoPromotionCooldown,
+	})
+
+	fs := fusefs.New(cfg.General.MountPoint, cfg.General.LocalDir, indexDir, st, ca, fileClient, mf, nil, nil, fetchPolicy)
 
 	poller := daemon.NewManifestPoller(rc, st, mf, 10*time.Minute)
-	cacheMgr := daemon.NewCacheManager(ca, st, maxBytes, 5*time.Minute)
+	cacheMgr := daemon.NewCacheManager(ca, st, maxBytes, 30*time.Second)
 
 	backupDir := filepath.Join(cfg.General.CacheDir, "backup")
 	stateFile := filepath.Join(cfg.General.CacheDir, "compaction-state")

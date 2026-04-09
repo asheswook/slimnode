@@ -20,10 +20,11 @@ func TestNew(t *testing.T) {
 	assert.NotNil(t, f)
 	assert.Equal(t, "/mnt", f.mountPoint)
 	assert.Equal(t, st, f.st)
-	assert.NotNil(t, f.blockmaps)   // nil input → initialized to empty map
-	assert.NotNil(t, f.noBlockmap)  // always initialized
-	assert.NotNil(t, f.finCh)       // created with cap=64
+	assert.NotNil(t, f.blockmaps)  // nil input -> initialized to empty map
+	assert.NotNil(t, f.noBlockmap) // always initialized
+	assert.NotNil(t, f.finCh)      // created with cap=64
 	assert.Equal(t, 64, cap(f.finCh))
+	assert.NotNil(t, f.fetchPolicy)
 }
 
 // TestNew_WithBlockmaps verifies that New() preserves non-nil blockmaps.
@@ -31,7 +32,7 @@ func TestNew_WithBlockmaps(t *testing.T) {
 	bm := map[string]*blockmap.Blockmap{"blk00000.dat": {}}
 	f := New("/mnt", t.TempDir(), "", newMockStore(), newMockCache(t.TempDir()), newMockRemoteClient(), nil, nil, bm)
 
-	assert.Equal(t, bm, f.blockmaps)  // preserved
+	assert.Equal(t, bm, f.blockmaps) // preserved
 }
 
 // TestUpdateManifest verifies that UpdateManifest() atomically replaces the manifest.
@@ -58,7 +59,7 @@ func TestUpdateManifest_Concurrent(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
-	// Just verifying no race condition — no assertion needed
+	// Just verifying no race condition - no assertion needed
 }
 
 // TestFinalizationEvents verifies that FinalizationEvents() returns the finCh channel.
