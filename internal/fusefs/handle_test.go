@@ -132,6 +132,37 @@ func TestReadViaBlockmap_CrossBlockRead(t *testing.T) {
 	assert.True(t, bc.HasBlock(filename, entryB.FileOffset))
 }
 
+func TestReadViaBlockmap_NoOverlappingBlocks_ReturnsENODATA(t *testing.T) {
+	const filename = "blk00199.dat"
+
+	entry, _ := buildTestBlock(0, 500)
+	bm := &blockmap.Blockmap{Filename: filename, Entries: []blockmap.BlockmapEntry{entry}}
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename: filename,
+		State:    store.FileStateRemote,
+		Source:   store.FileSourceServer,
+		Size:     2000,
+		SHA256:   "dummy",
+	}))
+
+	rc := newMockRemoteClient()
+	beyondOffset := int64(1500)
+	rangeData := []byte("range-fallback-data")
+	rc.blockData[fmt.Sprintf("%s:%d", filename, beyondOffset)] = rangeData
+
+	fsys := makeTestFS(t, st, newMockCache(t.TempDir()), rc, newMockBlockCache(), nil)
+	fsys.blockmaps[filename] = bm
+
+	h := makeHandle(fsys, filename, store.FileStateRemote)
+	dest := make([]byte, len(rangeData))
+	result, errno := h.Read(context.Background(), dest, beyondOffset)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, rangeData, readResultBytes(t, result))
+	assert.Equal(t, 1, rc.fetchBlockCallCount(), "must fall back to range fetch when blockmap has no overlapping entries")
+}
+
 // ============================================================================
 // Test 4: TestRead_NoBc_FallsBackToFullFile
 // ============================================================================

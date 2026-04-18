@@ -216,7 +216,7 @@ func (h *FileHandle) readViaBlockmap(ctx context.Context, dest []byte, off int64
 
 	blocks := bm.FindBlocks(off, int64(len(dest)))
 	if len(blocks) == 0 {
-		return fuse.ReadResultData([]byte{}), fs.OK
+		return nil, syscall.ENODATA
 	}
 
 	for i := range blocks {
