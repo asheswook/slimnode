@@ -7,11 +7,14 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hanwen/go-fuse/v2/fs"
+
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 // ============================================================================
@@ -127,6 +130,94 @@ func TestNullWriteHandle_Read_PrefersLocalFile(t *testing.T) {
 	assert.Equal(t, 0, rc.fetchBlockCallCount(), "must not call remote when local file exists")
 }
 
+func TestNullWriteHandle_Read_RemoteState_SkipsLocalFile(t *testing.T) {
+	const filename = "blk05455.dat"
+	localData := []byte("local stale data should be ignored")
+	remoteData := []byte("remote data must be used for REMOTE state")
+
+	rc := newMockRemoteClient()
+	rc.blockData[fmt.Sprintf("%s:%d", filename, int64(0))] = remoteData
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename:   filename,
+		State:      store.FileStateRemote,
+		Source:     store.FileSourceServer,
+		CreatedAt:  time.Now(),
+		LastAccess: time.Now(),
+	}))
+
+	fsys := makeTestFS(t, st, newMockCache(t.TempDir()), rc, nil, nil)
+	require.NoError(t, os.WriteFile(filepath.Join(fsys.localDir, filename), localData, 0644))
+
+	h := &NullWriteHandle{fs: fsys, filename: filename}
+	dest := make([]byte, len(remoteData))
+	result, errno := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, remoteData, readResultBytes(t, result))
+	assert.Equal(t, 1, rc.fetchBlockCallCount(), "REMOTE state must bypass stale local file")
+}
+
+func TestNullWriteHandle_Read_LocalFinalizedState_PrefersLocalFile(t *testing.T) {
+	const filename = "blk05454.dat"
+	localData := []byte("local finalized data should be preferred")
+	remoteData := []byte("remote data")
+
+	rc := newMockRemoteClient()
+	rc.blockData[fmt.Sprintf("%s:%d", filename, int64(0))] = remoteData
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename:   filename,
+		State:      store.FileStateLocalFinalized,
+		Source:     store.FileSourceLocal,
+		CreatedAt:  time.Now(),
+		LastAccess: time.Now(),
+	}))
+
+	fsys := makeTestFS(t, st, newMockCache(t.TempDir()), rc, nil, nil)
+	require.NoError(t, os.WriteFile(filepath.Join(fsys.localDir, filename), localData, 0644))
+
+	h := &NullWriteHandle{fs: fsys, filename: filename}
+	dest := make([]byte, len(localData))
+	result, errno := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, localData, readResultBytes(t, result))
+	assert.Equal(t, 0, rc.fetchBlockCallCount(), "LOCAL_FINALIZED state should read local first")
+}
+
+func TestNullWriteHandle_Read_CachedState_PrefersCacheOverLocal(t *testing.T) {
+	const filename = "blk05456.dat"
+	localData := []byte("stale local data")
+	cacheData := []byte("cache data should be preferred")
+	remoteData := []byte("remote data")
+
+	rc := newMockRemoteClient()
+	rc.blockData[fmt.Sprintf("%s:%d", filename, int64(0))] = remoteData
+
+	st := newMockStore()
+	require.NoError(t, st.UpsertFile(&store.FileEntry{
+		Filename:   filename,
+		State:      store.FileStateCached,
+		Source:     store.FileSourceServer,
+		CreatedAt:  time.Now(),
+		LastAccess: time.Now(),
+	}))
+
+	ca := newMockCache(t.TempDir())
+	require.NoError(t, os.WriteFile(ca.Path(filename), cacheData, 0644))
+
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+	require.NoError(t, os.WriteFile(filepath.Join(fsys.localDir, filename), localData, 0644))
+
+	h := &NullWriteHandle{fs: fsys, filename: filename}
+	dest := make([]byte, len(cacheData))
+	result, errno := h.Read(context.Background(), dest, 0)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, cacheData, readResultBytes(t, result))
+	assert.Equal(t, 0, rc.fetchBlockCallCount(), "CACHED state should use cache and skip local")
+}
+
 func TestNullWriteHandle_Read_PrefersCacheOverRemote(t *testing.T) {
 	const filename = "rev00400.dat"
 	cacheData := []byte("cached rev data downloaded from server")
@@ -188,7 +279,7 @@ func TestIsRevFile(t *testing.T) {
 		{"rev99999.dat", true},
 		{"blk00000.dat", false},
 		{"revindex", false},
-		{"rev.dat", false},   // mid is empty
+		{"rev.dat", false},    // mid is empty
 		{"revabc.dat", false}, // non-digits
 		{"", false},
 	}

@@ -10,6 +10,8 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+
+	"github.com/asheswook/bitcoin-slimnode/internal/store"
 )
 
 var _ fs.FileWriter = (*NullWriteHandle)(nil)
@@ -43,20 +45,49 @@ func (h *NullWriteHandle) Write(_ context.Context, data []byte, off int64) (uint
 	return uint32(len(data)), fs.OK
 }
 
-// Read tries local file, then cache, then remote server. This ordering ensures
-// LOCAL_FINALIZED files (not yet on the server) and CACHED files (already
-// downloaded) are served from disk without unnecessary network round-trips.
 func (h *NullWriteHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	if len(dest) == 0 {
+		return fuse.ReadResultData([]byte{}), fs.OK
+	}
+
+	if h.fs != nil && h.fs.st != nil {
+		if entry, err := h.fs.st.GetFile(h.filename); err == nil {
+			switch entry.State {
+			case store.FileStateActive, store.FileStateLocalFinalized:
+				if result, errno := preadLocal(filepath.Join(h.fs.localDir, h.filename), dest, off); errno == fs.OK {
+					return result, fs.OK
+				}
+				if h.fs.ca != nil {
+					if result, errno := preadLocal(h.fs.ca.Path(h.filename), dest, off); errno == fs.OK {
+						return result, fs.OK
+					}
+				}
+				return h.readRemote(ctx, dest, off)
+
+			case store.FileStateCached, store.FileStateRemote:
+				if h.fs.ca != nil {
+					if result, errno := preadLocal(h.fs.ca.Path(h.filename), dest, off); errno == fs.OK {
+						return result, fs.OK
+					}
+				}
+				return h.readRemote(ctx, dest, off)
+			}
+		}
+	}
+
 	if result, errno := preadLocal(filepath.Join(h.fs.localDir, h.filename), dest, off); errno == fs.OK {
 		return result, fs.OK
 	}
-
 	if h.fs.ca != nil {
 		if result, errno := preadLocal(h.fs.ca.Path(h.filename), dest, off); errno == fs.OK {
 			return result, fs.OK
 		}
 	}
 
+	return h.readRemote(ctx, dest, off)
+}
+
+func (h *NullWriteHandle) readRemote(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	data, err := h.fs.rc.FetchBlock(ctx, h.filename, off, int64(len(dest)))
 	if err != nil {
 		return fuse.ReadResultData(nil), syscall.EIO
