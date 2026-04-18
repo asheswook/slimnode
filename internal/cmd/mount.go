@@ -76,10 +76,8 @@ func (m *MountCmd) Execute(args []string) error {
 	}
 	for i := range localFiles {
 		existing, _ := st.GetFile(localFiles[i].Filename)
-		if existing != nil && (existing.State == store.FileStateRemote || existing.State == store.FileStateCached) {
-			// Don't downgrade a known remote/cached file to ACTIVE based on a local scan.
-			// This prevents stale local artifacts from blocking remote fetching after a crash.
-			slog.Debug("skipping local scan override for remote/cached file", "file", localFiles[i].Filename)
+		if existing != nil && existing.State != store.FileStateActive {
+			slog.Debug("skipping local scan override for non-ACTIVE file", "file", localFiles[i].Filename, "state", existing.State)
 			continue
 		}
 		_ = st.UpsertFile(&localFiles[i])
@@ -113,6 +111,18 @@ func (m *MountCmd) Execute(args []string) error {
 				LastAccess: time.Now(),
 			}
 			_ = st.UpsertFile(entry)
+			continue
+		}
+
+		if existing.State == store.FileStateRemote || existing.State == store.FileStateCached {
+			if existing.Size != f.Size || (f.SHA256 != "" && existing.SHA256 != f.SHA256) {
+				existing.Size = f.Size
+				if f.SHA256 != "" {
+					existing.SHA256 = f.SHA256
+				}
+				existing.LastAccess = time.Now()
+				_ = st.UpsertFile(existing)
+			}
 		}
 	}
 
@@ -194,18 +204,19 @@ func (m *MountCmd) Execute(args []string) error {
 
 func loadInitialManifest(ctx context.Context, rc manifestFetcher, cacheDir string) (*manifest.Manifest, error) {
 	localPath := filepath.Join(cacheDir, "manifest.json")
-	if mf, err := manifest.ParseFile(localPath); err == nil {
+	mf, _, err := rc.FetchManifest(ctx, "")
+	if err == nil {
+		if mf == nil {
+			return &manifest.Manifest{}, nil
+		}
+		_ = manifest.WriteFile(localPath, mf)
 		return mf, nil
 	}
 
-	mf, _, err := rc.FetchManifest(ctx, "")
-	if err != nil {
-		return nil, err
-	}
-	if mf == nil {
-		return &manifest.Manifest{}, nil
+	if cached, parseErr := manifest.ParseFile(localPath); parseErr == nil {
+		slog.Warn("failed to fetch latest manifest; using cached manifest", "err", err, "path", localPath)
+		return cached, nil
 	}
 
-	_ = manifest.WriteFile(localPath, mf)
-	return mf, nil
+	return nil, err
 }
