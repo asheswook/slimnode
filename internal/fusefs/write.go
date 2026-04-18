@@ -19,6 +19,7 @@ import (
 
 var _ fs.FileWriter = (*WriteHandle)(nil)
 var _ fs.FileFsyncer = (*WriteHandle)(nil)
+var _ fs.FileAllocater = (*WriteHandle)(nil)
 
 // WriteHandle implements write operations for an ACTIVE file.
 type WriteHandle struct {
@@ -105,7 +106,10 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Read implements fs.FileReader so WriteHandle can also serve reads on ACTIVE files.
+func (h *WriteHandle) Allocate(ctx context.Context, off uint64, size uint64, mode uint32) syscall.Errno {
+	return platformAllocate(h.file, off, size)
+}
+
 func (h *WriteHandle) Read(ctx context.Context, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	n, err := h.file.ReadAt(dest, off)
 	if err != nil && n == 0 {
