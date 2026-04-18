@@ -72,11 +72,8 @@ func TestScanLocalFiles_SkipsNonBlockFiles(t *testing.T) {
 func TestScanLocalFiles_SkipsZeroByteFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create a 0-byte file (crash artifact)
-	zeroFile := filepath.Join(dir, "blk99999.dat")
-	require.NoError(t, os.WriteFile(zeroFile, []byte{}, 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "temp.tmp"), []byte{}, 0644))
 
-	// Create a valid file
 	validFile := filepath.Join(dir, "blk00001.dat")
 	require.NoError(t, os.WriteFile(validFile, make([]byte, 1024), 0644))
 
@@ -85,9 +82,35 @@ func TestScanLocalFiles_SkipsZeroByteFiles(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "blk00001.dat", entries[0].Filename)
 
-	// 0-byte file should be removed from disk
-	_, statErr := os.Stat(zeroFile)
+	_, statErr := os.Stat(filepath.Join(dir, "temp.tmp"))
 	assert.True(t, os.IsNotExist(statErr), "zero-byte file should be removed")
+}
+
+func TestScanLocalFiles_KeepsZeroByteBlockFiles(t *testing.T) {
+	dir := t.TempDir()
+
+	zeroBlk := filepath.Join(dir, "blk05499.dat")
+	zeroRev := filepath.Join(dir, "rev05499.dat")
+	require.NoError(t, os.WriteFile(zeroBlk, []byte{}, 0644))
+	require.NoError(t, os.WriteFile(zeroRev, []byte{}, 0644))
+
+	entries, err := ScanLocalFiles(dir)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	seen := map[string]bool{}
+	for _, e := range entries {
+		seen[e.Filename] = true
+		assert.Equal(t, store.FileStateActive, e.State)
+		assert.EqualValues(t, 0, e.Size)
+	}
+	assert.True(t, seen["blk05499.dat"])
+	assert.True(t, seen["rev05499.dat"])
+
+	_, err = os.Stat(zeroBlk)
+	require.NoError(t, err)
+	_, err = os.Stat(zeroRev)
+	require.NoError(t, err)
 }
 
 func TestParseBlockFileNumber(t *testing.T) {

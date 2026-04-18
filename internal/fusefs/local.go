@@ -43,16 +43,26 @@ func ScanLocalFiles(localDir string) ([]store.FileEntry, error) {
 		if err != nil {
 			continue
 		}
-		if info.Size() == 0 {
-			slog.Warn("removing stale zero-byte file", "file", name)
-			_ = os.Remove(filepath.Join(localDir, name))
+
+		isBlk := false
+		if _, ok := parseBlockFileNumber(name, "blk"); ok {
+			isBlk = true
+		}
+		isRev := false
+		if _, ok := parseBlockFileNumber(name, "rev"); ok {
+			isRev = true
+		}
+
+		if !isBlk && !isRev {
+			if info.Size() == 0 {
+				slog.Warn("removing stale zero-byte file", "file", name)
+				_ = os.Remove(filepath.Join(localDir, name))
+			}
 			continue
 		}
 
-		if _, ok := parseBlockFileNumber(name, "blk"); !ok {
-			if _, ok := parseBlockFileNumber(name, "rev"); !ok {
-				continue
-			}
+		if info.Size() == 0 {
+			slog.Warn("keeping zero-byte block file to avoid index mismatch", "file", name)
 		}
 
 		result = append(result, store.FileEntry{
