@@ -1,6 +1,7 @@
 package fusefs
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -30,11 +31,11 @@ func TestGetattr_ActiveFile(t *testing.T) {
 	st.files["blk00000.dat"] = &store.FileEntry{Filename: "blk00000.dat", State: store.FileStateActive, Size: 2048}
 	ca := newMockCache(t.TempDir())
 	testFS := makeTestFS(t, st, ca, newMockRemoteClient(), nil, nil)
-	
+
 	// Create a real file with a DIFFERENT size than the store entry
 	realPath := filepath.Join(testFS.localDir, "blk00000.dat")
 	require.NoError(t, os.WriteFile(realPath, make([]byte, 4096), 0644))
-	
+
 	n := &FileNode{fs: testFS, filename: "blk00000.dat"}
 	var out fuse.AttrOut
 	errno := n.Getattr(t.Context(), nil, &out)
@@ -209,6 +210,35 @@ func TestFileNode_Open_RemoteBlkWithWriteFlag(t *testing.T) {
 	assert.Equal(t, uint32(fuse.FOPEN_KEEP_CACHE), flags)
 	_, isNull := fh.(*NullWriteHandle)
 	assert.True(t, isNull, "expected NullWriteHandle for REMOTE blk with write flag")
+}
+
+func TestFileNode_Open_RemoteBlkWithWriteFlag_ReadSkipsStaleLocal(t *testing.T) {
+	const filename = "blk05455.dat"
+	const off int64 = 117361686
+	remoteData := []byte{0x91, 0xF0, 0xBA, 0xDE, 0xC4, 0x6C, 0x9C, 0x90, 0x3D, 0x9E, 0x9E, 0xDA, 0xE6, 0x7C, 0x16, 0x7B}
+
+	st := newMockStore()
+	st.files[filename] = &store.FileEntry{Filename: filename, State: store.FileStateRemote, Source: store.FileSourceServer}
+	ca := newMockCache(t.TempDir())
+	rc := newMockRemoteClient()
+	rc.blockData[fmt.Sprintf("%s:%d", filename, off)] = remoteData
+	fsys := makeTestFS(t, st, ca, rc, nil, nil)
+
+	require.NoError(t, os.WriteFile(filepath.Join(fsys.localDir, filename), make([]byte, len(remoteData)), 0644))
+
+	n := &FileNode{fs: fsys, filename: filename}
+	fh, _, errno := n.Open(t.Context(), syscall.O_RDWR)
+	require.Equal(t, syscall.Errno(0), errno)
+	require.NotNil(t, fh)
+
+	nh, ok := fh.(*NullWriteHandle)
+	require.True(t, ok, "expected NullWriteHandle for REMOTE blk with write flag")
+
+	dest := make([]byte, len(remoteData))
+	result, readErrno := nh.Read(t.Context(), dest, off)
+	require.Equal(t, syscall.Errno(0), readErrno)
+	assert.Equal(t, remoteData, readResultBytes(t, result))
+	assert.Equal(t, 1, rc.fetchBlockCallCount(), "must fetch from remote and skip stale local")
 }
 
 func TestFileNode_Open_RemoteRevReadOnly(t *testing.T) {
