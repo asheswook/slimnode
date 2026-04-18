@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -18,7 +21,9 @@ import (
 
 func newCDNClient(t *testing.T, baseURL string) *CDNClient {
 	t.Helper()
-	return NewCDN(baseURL, 10*time.Second, 3).withRetryBaseDelay(10 * time.Millisecond)
+	c := NewCDN(baseURL, 10*time.Second, 3)
+	c.SetRetryBaseDelay(10 * time.Millisecond)
+	return c
 }
 
 func TestCDNFetchFileSuccess(t *testing.T) {
@@ -83,8 +88,9 @@ func TestCDNFetchFileRetryOnServerError(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	var buf bytes.Buffer
-	err := NewCDN(srv.URL, 10*time.Second, 3).withRetryBaseDelay(10 * time.Millisecond).
-		FetchFile(context.Background(), "blk00000.dat", &buf)
+	cdn := NewCDN(srv.URL, 10*time.Second, 3)
+	cdn.SetRetryBaseDelay(10 * time.Millisecond)
+	err := cdn.FetchFile(context.Background(), "blk00000.dat", &buf)
 
 	require.NoError(t, err)
 	assert.Equal(t, data, buf.Bytes())
@@ -110,7 +116,7 @@ func TestCDNFetchBlock(t *testing.T) {
 	assert.Equal(t, data[offset:offset+length], got)
 }
 
-func TestCDNFetchBlockAccepts200(t *testing.T) {
+func TestCDNFetchBlockRejects200(t *testing.T) {
 	data := testutil.RandomBytes(t, 512)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -121,8 +127,9 @@ func TestCDNFetchBlockAccepts200(t *testing.T) {
 
 	got, err := newCDNClient(t, srv.URL).FetchBlock(context.Background(), "blk00000.dat", 0, int64(len(data)))
 
-	require.NoError(t, err)
-	assert.Equal(t, data, got)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrServerUnavailable)
+	assert.Nil(t, got)
 }
 
 func TestCDNFetchBlock404(t *testing.T) {
@@ -296,4 +303,113 @@ func TestCDNContextCancellation(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("FetchFile did not return after context cancellation")
 	}
+}
+
+func TestCDNFetchBlockRejectsZeroLength(t *testing.T) {
+	c := newCDNClient(t, "http://127.0.0.1:0")
+	got, err := c.FetchBlock(context.Background(), "x", 0, 0)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "length")
+	assert.Nil(t, got)
+}
+
+func TestCDNFetchBlockRejectsNegativeOffset(t *testing.T) {
+	c := newCDNClient(t, "http://127.0.0.1:0")
+	got, err := c.FetchBlock(context.Background(), "x", -1, 128)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "offset")
+	assert.Nil(t, got)
+}
+
+func TestCDNFetchBlockRespectsLengthLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPartialContent)
+		_, _ = w.Write(bytes.Repeat([]byte{0xAB}, 200))
+	}))
+	t.Cleanup(srv.Close)
+
+	got, err := newCDNClient(t, srv.URL).FetchBlock(context.Background(), "blk00000.dat", 0, 64)
+	require.NoError(t, err)
+	assert.Equal(t, 64, len(got))
+}
+
+func TestCDNRetryBaseDelayZeroNoPanic(t *testing.T) {
+	var attempts int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n < 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewCDN(srv.URL, 10*time.Second, 3)
+	c.SetRetryBaseDelay(0)
+
+	var buf bytes.Buffer
+	require.NotPanics(t, func() {
+		_ = c.FetchFile(context.Background(), "blk00000.dat", &buf)
+	})
+}
+
+func TestCDNDoWithRetryReturnsOnContextCancel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(30 * time.Second):
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	c := NewCDN(srv.URL, 30*time.Second, 3)
+	c.SetRetryBaseDelay(10 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() {
+		var buf bytes.Buffer
+		done <- c.FetchFile(ctx, "blk00000.dat", &buf)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, context.Canceled) || errors.Is(err, ErrServerUnavailable))
+	case <-time.After(5 * time.Second):
+		t.Fatal("FetchFile did not return after context cancellation")
+	}
+}
+
+func TestCDNDoWithRetryLogsAttempts(t *testing.T) {
+	var attempts int32
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&attempts, 1)
+		if n < 2 {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data"))
+	}))
+	t.Cleanup(srv.Close)
+
+	var logBuf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	c := NewCDN(srv.URL, 10*time.Second, 3)
+	c.SetRetryBaseDelay(10 * time.Millisecond)
+	c.SetLogger(logger)
+
+	var buf bytes.Buffer
+	err := c.FetchFile(context.Background(), "blk00000.dat", &buf)
+	require.NoError(t, err)
+	assert.Contains(t, logBuf.String(), "retrying request")
 }

@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -16,33 +18,63 @@ import (
 	"github.com/asheswook/bitcoin-slimnode/internal/manifest"
 )
 
+const userAgent = "slimnode"
+
+// maxBlockmapSize is the maximum allowed response size for blockmap fetches (64 MiB).
+const maxBlockmapSize = 64 << 20
+
 // HTTPClient fetches files and manifests from the archive server over HTTP.
 type HTTPClient struct {
 	baseURL        string
 	httpClient     *http.Client
-	retryCount     int
+	retryCount     int // retryCount is the maximum number of retries (total attempts = retryCount + 1).
 	retryBaseDelay time.Duration
 	logger         *slog.Logger
 }
 
 // New creates a new Client.
+// The timeout parameter controls how long the client waits for response headers
+// (via http.Transport.ResponseHeaderTimeout). Body streaming is not time-limited
+// by the client; callers should use context deadlines for per-download timeouts.
+// A timeout of 0 means no timeout.
 func New(baseURL string, timeout time.Duration, retryCount int) *HTTPClient {
+	transport := &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   10 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}).DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ResponseHeaderTimeout: timeout, // 0 = no timeout
+	}
 	return &HTTPClient{
 		baseURL:        strings.TrimRight(baseURL, "/"),
-		httpClient:     &http.Client{Timeout: timeout},
+		httpClient:     &http.Client{Transport: transport},
 		retryCount:     retryCount,
 		retryBaseDelay: time.Second,
 		logger:         slog.Default(),
 	}
 }
 
-func (c *HTTPClient) withRetryBaseDelay(d time.Duration) *HTTPClient {
+// SetRetryBaseDelay sets the base delay for exponential backoff between retry attempts.
+func (c *HTTPClient) SetRetryBaseDelay(d time.Duration) {
 	c.retryBaseDelay = d
-	return c
+}
+
+// SetLogger replaces the default logger.
+func (c *HTTPClient) SetLogger(l *slog.Logger) {
+	c.logger = l
 }
 
 // FetchFile downloads a file from the server and streams it to dest.
 // It computes SHA-256 while streaming and verifies against the X-SHA256 response header.
+// The server MUST include an X-SHA256 header; ErrMissingHash is returned otherwise.
+// On ErrHashMismatch or ErrMissingHash, dest may contain partial or corrupt data;
+// caller must discard it.
 // Never buffers the entire file in memory.
 func (c *HTTPClient) FetchFile(ctx context.Context, filename string, dest io.Writer) error {
 	url := c.baseURL + "/v1/file/" + filename
@@ -51,7 +83,7 @@ func (c *HTTPClient) FetchFile(ctx context.Context, filename string, dest io.Wri
 		return http.NewRequest(http.MethodGet, url, nil)
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrServerUnavailable, err)
+		return errors.Join(ErrServerUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -63,6 +95,9 @@ func (c *HTTPClient) FetchFile(ctx context.Context, filename string, dest io.Wri
 	}
 
 	expectedHash := resp.Header.Get("X-SHA256")
+	if expectedHash == "" {
+		return ErrMissingHash
+	}
 
 	// Stream and compute SHA-256 simultaneously via TeeReader - no full-file buffering.
 	h := sha256.New()
@@ -71,11 +106,9 @@ func (c *HTTPClient) FetchFile(ctx context.Context, filename string, dest io.Wri
 		return fmt.Errorf("failed to stream file: %w", err)
 	}
 
-	if expectedHash != "" {
-		computedHash := hex.EncodeToString(h.Sum(nil))
-		if computedHash != expectedHash {
-			return ErrHashMismatch
-		}
+	computedHash := hex.EncodeToString(h.Sum(nil))
+	if computedHash != expectedHash {
+		return ErrHashMismatch
 	}
 
 	return nil
@@ -84,6 +117,7 @@ func (c *HTTPClient) FetchFile(ctx context.Context, filename string, dest io.Wri
 // FetchManifest fetches the server manifest.
 // If etag is non-empty and the server returns 304 Not Modified,
 // returns (nil, etag, nil) indicating the manifest has not changed.
+// No retry: callers poll periodically, retrying at the next interval.
 func (c *HTTPClient) FetchManifest(ctx context.Context, etag string) (*manifest.Manifest, string, error) {
 	url := c.baseURL + "/v1/manifest"
 
@@ -98,7 +132,7 @@ func (c *HTTPClient) FetchManifest(ctx context.Context, etag string) (*manifest.
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: %v", ErrServerUnavailable, err)
+		return nil, "", errors.Join(ErrServerUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -132,7 +166,7 @@ func (c *HTTPClient) HealthCheck(ctx context.Context) error {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrServerUnavailable, err)
+		return errors.Join(ErrServerUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -157,6 +191,7 @@ func (c *HTTPClient) HealthCheck(ctx context.Context) error {
 // FetchBlockmap fetches the raw blockmap bytes for a given filename from /v1/blockmap/{filename}.
 // Returns ErrFileNotFound if the server responds with 404.
 // The caller is responsible for parsing and verifying the blockmap.
+// Response is capped at maxBlockmapSize (64 MiB).
 func (c *HTTPClient) FetchBlockmap(ctx context.Context, filename string) ([]byte, error) {
 	url := c.baseURL + "/v1/blockmap/" + filename
 
@@ -164,7 +199,7 @@ func (c *HTTPClient) FetchBlockmap(ctx context.Context, filename string) ([]byte
 		return http.NewRequest(http.MethodGet, url, nil)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrServerUnavailable, err)
+		return nil, errors.Join(ErrServerUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -175,14 +210,22 @@ func (c *HTTPClient) FetchBlockmap(ctx context.Context, filename string) ([]byte
 		return nil, fmt.Errorf("%w: HTTP %d", ErrServerUnavailable, resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, maxBlockmapSize))
 }
 
 // FetchBlock fetches a specific byte range of a file from /v1/file/{filename} using an HTTP Range header.
 // Returns ErrFileNotFound if the server responds with 404.
-// Accepts both 206 Partial Content and 200 OK responses.
+// Only accepts 206 Partial Content; 200 OK is treated as an error.
+// Response is capped at the requested length via io.LimitReader.
 // No hash verification is done here - the caller handles it.
 func (c *HTTPClient) FetchBlock(ctx context.Context, filename string, offset, length int64) ([]byte, error) {
+	if length <= 0 {
+		return nil, fmt.Errorf("FetchBlock: length must be positive, got %d", length)
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("FetchBlock: offset must be non-negative, got %d", offset)
+	}
+
 	url := c.baseURL + "/v1/file/" + filename
 
 	resp, err := c.doWithRetry(ctx, func() (*http.Request, error) {
@@ -195,23 +238,25 @@ func (c *HTTPClient) FetchBlock(ctx context.Context, filename string, offset, le
 		return req, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrServerUnavailable, err)
+		return nil, errors.Join(ErrServerUnavailable, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrFileNotFound
 	}
-	// Accept both 206 Partial Content and 200 OK (some servers may return full file).
-	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP %d", ErrServerUnavailable, resp.StatusCode)
+	if resp.StatusCode != http.StatusPartialContent {
+		return nil, fmt.Errorf("%w: expected 206, got HTTP %d", ErrServerUnavailable, resp.StatusCode)
 	}
 
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, length))
 }
 
 // FetchSnapshot downloads a snapshot file from /v1/snapshot/{name} and streams it to dest.
 // It computes SHA-256 while streaming and verifies against the X-SHA256 response header.
+// The server MUST include an X-SHA256 header; ErrMissingHash is returned otherwise.
+// On ErrHashMismatch or ErrMissingHash, dest may contain partial or corrupt data;
+// caller must discard it.
 func (c *HTTPClient) FetchSnapshot(ctx context.Context, name string, dest io.Writer) error {
 	url := c.baseURL + "/v1/snapshot/" + name
 
@@ -219,7 +264,7 @@ func (c *HTTPClient) FetchSnapshot(ctx context.Context, name string, dest io.Wri
 		return http.NewRequest(http.MethodGet, url, nil)
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrServerUnavailable, err)
+		return errors.Join(ErrServerUnavailable, err)
 	}
 	defer resp.Body.Close()
 
@@ -231,6 +276,9 @@ func (c *HTTPClient) FetchSnapshot(ctx context.Context, name string, dest io.Wri
 	}
 
 	expectedHash := resp.Header.Get("X-SHA256")
+	if expectedHash == "" {
+		return ErrMissingHash
+	}
 
 	h := sha256.New()
 	tee := io.TeeReader(resp.Body, h)
@@ -238,11 +286,9 @@ func (c *HTTPClient) FetchSnapshot(ctx context.Context, name string, dest io.Wri
 		return fmt.Errorf("failed to stream snapshot: %w", err)
 	}
 
-	if expectedHash != "" {
-		computedHash := hex.EncodeToString(h.Sum(nil))
-		if computedHash != expectedHash {
-			return ErrHashMismatch
-		}
+	computedHash := hex.EncodeToString(h.Sum(nil))
+	if computedHash != expectedHash {
+		return ErrHashMismatch
 	}
 
 	return nil
@@ -256,8 +302,13 @@ func (c *HTTPClient) doWithRetry(ctx context.Context, makeReq func() (*http.Requ
 		if attempt > 0 {
 			// Exponential backoff: base * 2^(attempt-1), with ±20% jitter.
 			base := time.Duration(1<<uint(attempt-1)) * c.retryBaseDelay
-			jitter := time.Duration(rand.Int63n(int64(base / 5)))
+			var jitter time.Duration
+			if j := int64(base / 5); j > 0 {
+				jitter = time.Duration(rand.Int63n(j))
+			}
 			wait := base + jitter
+			c.logger.Debug("retrying request",
+				"attempt", attempt, "wait", wait, "err", lastErr)
 			select {
 			case <-ctx.Done():
 				return nil, ctx.Err()
@@ -270,9 +321,13 @@ func (c *HTTPClient) doWithRetry(ctx context.Context, makeReq func() (*http.Requ
 			return nil, err
 		}
 		req = req.WithContext(ctx)
+		req.Header.Set("User-Agent", userAgent)
 
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			lastErr = err
 			continue
 		}
@@ -280,6 +335,8 @@ func (c *HTTPClient) doWithRetry(ctx context.Context, makeReq func() (*http.Requ
 		if resp.StatusCode >= 500 {
 			resp.Body.Close()
 			lastErr = fmt.Errorf("server error: %d", resp.StatusCode)
+			c.logger.Debug("server 5xx, will retry",
+				"attempt", attempt, "status", resp.StatusCode)
 			continue
 		}
 
