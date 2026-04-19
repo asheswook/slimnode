@@ -391,16 +391,17 @@ func buildBlockmapBytes(entries []blockmap.BlockmapEntry) ([]byte, string) {
 func makeTestFS(t *testing.T, st *mockStore, ca *mockCache, rc *mockRemoteClient, bc *mockBlockCache, m *manifest.Manifest) *FS {
 	t.Helper()
 	f := &FS{
-		localDir:    t.TempDir(),
-		st:          st,
-		ca:          ca,
-		rc:          rc,
-		fetchPolicy: NewFetchPolicy(FetchPolicyConfig{}),
-		manifest:    m,
-		blockmaps:   make(map[string]*blockmap.Blockmap),
-		noBlockmap:  make(map[string]bool),
-		downloadSem: make(chan struct{}, 4),
-		finCh:       make(chan string, 64),
+		localDir:           t.TempDir(),
+		st:                 st,
+		ca:                 ca,
+		rc:                 rc,
+		fetchPolicy:        NewFetchPolicy(FetchPolicyConfig{}),
+		manifest:           m,
+		blockmaps:          make(map[string]*blockmap.Blockmap),
+		noBlockmap:         make(map[string]bool),
+		downloadSem:        make(chan struct{}, 4),
+		finCh:              make(chan string, 64),
+		activeWriteHandles: make(map[string]int),
 	}
 	if bc != nil {
 		f.bc = bc
