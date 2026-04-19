@@ -31,6 +31,9 @@ type FS struct {
 	finCh       chan string
 	server      *fuse.Server
 
+	writeMu            sync.Mutex
+	activeWriteHandles map[string]int
+
 	// Block-level fetch support
 	blockmaps    map[string]*blockmap.Blockmap
 	blockmapsMu  sync.RWMutex
@@ -63,20 +66,21 @@ func New(mountPoint, localDir, indexDir string, st store.Store, ca cache.Cache, 
 	}
 
 	return &FS{
-		mountPoint:    mountPoint,
-		localDir:      localDir,
-		indexDir:      indexDir,
-		st:            st,
-		ca:            ca,
-		rc:            rc,
-		fetchPolicy:   policy,
-		manifest:      m,
-		bc:            bc,
-		blockmaps:     bmField,
-		noBlockmap:    make(map[string]bool),
-		downloadSem:   make(chan struct{}, 4),
-		finCh:         make(chan string, 64),
-		indexLoopback: loopback,
+		mountPoint:         mountPoint,
+		localDir:           localDir,
+		indexDir:           indexDir,
+		st:                 st,
+		ca:                 ca,
+		rc:                 rc,
+		fetchPolicy:        policy,
+		manifest:           m,
+		bc:                 bc,
+		blockmaps:          bmField,
+		noBlockmap:         make(map[string]bool),
+		downloadSem:        make(chan struct{}, 4),
+		finCh:              make(chan string, 64),
+		activeWriteHandles: make(map[string]int),
+		indexLoopback:      loopback,
 	}
 }
 
