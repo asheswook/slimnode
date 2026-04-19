@@ -28,6 +28,10 @@ type MountCmd struct {
 
 // Execute runs the mount command.
 func (m *MountCmd) Execute(args []string) error {
+	if err := configureLoggingFromArgs(os.Args[1:], os.Stderr); err != nil {
+		return err
+	}
+
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
@@ -76,11 +80,16 @@ func (m *MountCmd) Execute(args []string) error {
 	}
 	for i := range localFiles {
 		existing, _ := st.GetFile(localFiles[i].Filename)
+		merged := mergeLocalScanEntry(existing, localFiles[i])
 		if existing != nil && existing.State != store.FileStateActive {
-			slog.Debug("skipping local scan override for non-ACTIVE file", "file", localFiles[i].Filename, "state", existing.State)
-			continue
+			slog.Info("promoting local file state to ACTIVE based on local scan",
+				"file", localFiles[i].Filename,
+				"from_state", existing.State,
+				"from_source", existing.Source,
+				"size", localFiles[i].Size,
+			)
 		}
-		_ = st.UpsertFile(&localFiles[i])
+		_ = st.UpsertFile(merged)
 	}
 
 	// Clean up orphaned ACTIVE entries: if a file is ACTIVE in the store but no
@@ -219,4 +228,22 @@ func loadInitialManifest(ctx context.Context, rc manifestFetcher, cacheDir strin
 	}
 
 	return nil, err
+}
+
+func mergeLocalScanEntry(existing *store.FileEntry, scanned store.FileEntry) *store.FileEntry {
+	if existing == nil {
+		cp := scanned
+		return &cp
+	}
+
+	merged := *existing
+	merged.State = scanned.State
+	merged.Source = scanned.Source
+	merged.Size = scanned.Size
+	merged.CreatedAt = scanned.CreatedAt
+	merged.LastAccess = scanned.LastAccess
+	if scanned.State == store.FileStateActive {
+		merged.SHA256 = ""
+	}
+	return &merged
 }
