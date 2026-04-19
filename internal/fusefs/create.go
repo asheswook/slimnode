@@ -65,5 +65,6 @@ func (r *RootNode) Create(ctx context.Context, name string, flags uint32, mode u
 	inode := r.NewInode(ctx, node, stable)
 
 	wh := &WriteHandle{fs: r.fs, filename: name, file: f}
+	wh.markOpened()
 	return inode, wh, 0, fs.OK
 }
