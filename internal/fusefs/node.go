@@ -90,12 +90,17 @@ func (n *FileNode) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint3
 		return fh, fuse.FOPEN_KEEP_CACHE, fs.OK
 
 	case store.FileStateActive:
+		if (flags & (syscall.O_WRONLY | syscall.O_RDWR)) == 0 {
+			fh := &FileHandle{fs: n.fs, filename: n.filename, state: entry.State}
+			return fh, 0, fs.OK
+		}
 		path := filepath.Join(n.fs.localDir, n.filename)
 		f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0644)
 		if err != nil {
 			return nil, 0, syscall.EIO
 		}
 		wh := &WriteHandle{fs: n.fs, filename: n.filename, file: f}
+		wh.markOpened()
 		return wh, 0, fs.OK
 
 	default:
