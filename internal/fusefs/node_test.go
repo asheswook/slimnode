@@ -153,12 +153,28 @@ func TestOpen_ActiveFile(t *testing.T) {
 	path := filepath.Join(testFS.localDir, "blk00002.dat")
 	require.NoError(t, os.WriteFile(path, []byte{}, 0644))
 	n := &FileNode{fs: testFS, filename: "blk00002.dat"}
-	fh, flags, errno := n.Open(t.Context(), 0)
+	fh, flags, errno := n.Open(t.Context(), syscall.O_RDWR)
 	require.Equal(t, syscall.Errno(0), errno)
 	assert.NotNil(t, fh)
 	assert.Equal(t, uint32(0), flags)
 	_, isWriteHandle := fh.(*WriteHandle)
 	assert.True(t, isWriteHandle)
+}
+
+func TestOpen_ActiveFile_ReadOnlyReturnsFileHandle(t *testing.T) {
+	st := newMockStore()
+	st.files["blk00002.dat"] = &store.FileEntry{Filename: "blk00002.dat", State: store.FileStateActive}
+	ca := newMockCache(t.TempDir())
+	testFS := makeTestFS(t, st, ca, newMockRemoteClient(), nil, nil)
+	path := filepath.Join(testFS.localDir, "blk00002.dat")
+	require.NoError(t, os.WriteFile(path, []byte("data"), 0644))
+
+	n := &FileNode{fs: testFS, filename: "blk00002.dat"}
+	fh, flags, errno := n.Open(t.Context(), syscall.O_RDONLY)
+	require.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, uint32(0), flags)
+	_, isFileHandle := fh.(*FileHandle)
+	assert.True(t, isFileHandle)
 }
 
 func TestOpen_RemoteFile(t *testing.T) {
