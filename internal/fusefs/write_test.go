@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 
@@ -23,7 +24,9 @@ func makeWriteHandle(t *testing.T, st *mockStore, filename string) (*WriteHandle
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0644)
 	require.NoError(t, err)
 	t.Cleanup(func() { f.Close() })
-	return &WriteHandle{fs: testFS, filename: filename, file: f}, testFS
+	h := &WriteHandle{fs: testFS, filename: filename, file: f}
+	h.markOpened()
+	return h, testFS
 }
 
 func TestWrite_Normal(t *testing.T) {
@@ -57,11 +60,21 @@ func TestWrite_TriggersFinalize(t *testing.T) {
 	entry := &store.FileEntry{Filename: "blk00003.dat", State: store.FileStateActive}
 	st.files["blk00003.dat"] = entry
 	h, testFS := makeWriteHandle(t, st, "blk00003.dat")
-	// Write some data first so file is not empty
-	_, errno := h.Write(t.Context(), []byte("test data"), 0)
+	content := []byte("test data")
+	_, errno := h.Write(t.Context(), content, 0)
 	require.Equal(t, syscall.Errno(0), errno)
-	// Directly call finalize (avoids writing 128MiB)
-	h.finalize(entry)
+
+	stored := st.files["blk00003.dat"]
+	assert.Equal(t, store.FileStateActive, stored.State)
+
+	path := filepath.Join(testFS.localDir, "blk00003.dat")
+	require.NoError(t, os.Truncate(path, store.FinalizedFileThreshold))
+	require.NoError(t, os.WriteFile(filepath.Join(testFS.localDir, "blk00004.dat"), []byte("next"), 0644))
+	_, errno = h.Write(t.Context(), []byte{0x01}, store.FinalizedFileThreshold-1)
+	require.Equal(t, syscall.Errno(0), errno)
+	errno = h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
 	// Verify finCh got the filename
 	select {
 	case name := <-testFS.finCh:
@@ -72,6 +85,211 @@ func TestWrite_TriggersFinalize(t *testing.T) {
 	// Verify state changed
 	updated := st.files["blk00003.dat"]
 	assert.Equal(t, store.FileStateLocalFinalized, updated.State)
+}
+
+func TestWrite_DoesNotFinalizeAtMaxBlockFileSizeDuringWrite(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "blk00999.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.MaxBlockFileSize))
+
+	_, errno := h.Write(t.Context(), []byte("abcd"), 0)
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateActive, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		t.Fatalf("unexpected finalization event for %s", name)
+	default:
+	}
+}
+
+func TestRelease_FinalizesBlockAtThreshold(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "blk00123.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.FinalizedFileThreshold))
+	require.NoError(t, os.WriteFile(filepath.Join(testFS.localDir, "blk00124.dat"), []byte("x"), 0644))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateLocalFinalized, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		assert.Equal(t, entry.Filename, name)
+	default:
+		t.Fatal("expected finalization event in channel")
+	}
+}
+
+func TestRelease_DoesNotFinalizeBelowThreshold(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "blk00124.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.FinalizedFileThreshold-1))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateActive, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		t.Fatalf("unexpected finalization event for %s", name)
+	default:
+	}
+}
+
+func TestRelease_DoesNotFinalizeRevEvenWithSuccessorBlock(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "rev05501.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.FinalizedFileThreshold))
+	require.NoError(t, os.WriteFile(filepath.Join(testFS.localDir, "blk05502.dat"), []byte("next"), 0644))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateActive, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		t.Fatalf("unexpected finalization event for %s", name)
+	default:
+	}
+}
+
+func TestRelease_DoesNotFinalizeWithoutSuccessorBlock(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "blk05499.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.MaxBlockFileSize))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateActive, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		t.Fatalf("unexpected finalization event for %s", name)
+	default:
+	}
+}
+
+func TestRelease_FinalizesWithSuccessorBlockEvenWithoutThreshold(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "blk07010.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, 1024))
+	require.NoError(t, os.WriteFile(filepath.Join(testFS.localDir, "blk07011.dat"), []byte("next"), 0644))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateLocalFinalized, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		assert.Equal(t, entry.Filename, name)
+	default:
+		t.Fatal("expected finalization event in channel")
+	}
+}
+
+func TestRelease_DoesNotFinalizeNonBlockFiles(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "metadata.tmp", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.MaxBlockFileSize))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	updated := st.files[entry.Filename]
+	assert.Equal(t, store.FileStateActive, updated.State)
+	select {
+	case name := <-testFS.finCh:
+		t.Fatalf("unexpected finalization event for %s", name)
+	default:
+	}
+}
+
+func TestRelease_ClosesFileDescriptor(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "rev00123.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+	h, testFS := makeWriteHandle(t, st, entry.Filename)
+
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	require.NoError(t, os.Truncate(path, store.FinalizedFileThreshold))
+
+	errno := h.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+
+	_, err := h.file.Stat()
+	require.Error(t, err)
+	assert.True(t, strings.Contains(strings.ToLower(err.Error()), "closed"))
+}
+
+func TestRelease_DoesNotFinalizeWithConcurrentOpenHandle(t *testing.T) {
+	st := newMockStore()
+	entry := &store.FileEntry{Filename: "blk07000.dat", State: store.FileStateActive}
+	st.files[entry.Filename] = entry
+
+	h1, testFS := makeWriteHandle(t, st, entry.Filename)
+	path := filepath.Join(testFS.localDir, entry.Filename)
+	file2, err := os.OpenFile(path, os.O_RDWR, 0644)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(testFS.localDir, "blk07001.dat"), []byte("next"), 0644))
+	h2 := &WriteHandle{fs: testFS, filename: entry.Filename, file: file2}
+	h2.markOpened()
+	t.Cleanup(func() { _ = file2.Close() })
+
+	require.NoError(t, os.Truncate(path, store.FinalizedFileThreshold))
+
+	errno := h1.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, store.FileStateActive, st.files[entry.Filename].State)
+	select {
+	case name := <-testFS.finCh:
+		t.Fatalf("unexpected finalization event for %s", name)
+	default:
+	}
+
+	errno = h2.Release(t.Context())
+	assert.Equal(t, syscall.Errno(0), errno)
+	assert.Equal(t, store.FileStateLocalFinalized, st.files[entry.Filename].State)
+	select {
+	case name := <-testFS.finCh:
+		assert.Equal(t, entry.Filename, name)
+	default:
+		t.Fatal("expected finalization event in channel")
+	}
 }
 
 func TestFsync_ActiveFile(t *testing.T) {
