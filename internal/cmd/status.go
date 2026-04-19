@@ -15,6 +15,10 @@ type StatusCmd struct{}
 
 // Execute runs the status command.
 func (c *StatusCmd) Execute(args []string) error {
+	if err := configureLoggingFromArgs(os.Args[1:], os.Stderr); err != nil {
+		return err
+	}
+
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)

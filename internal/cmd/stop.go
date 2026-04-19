@@ -18,6 +18,10 @@ type StopCmd struct{}
 
 // Execute sends SIGTERM to the running slimnode daemon and waits for it to exit.
 func (c *StopCmd) Execute(args []string) error {
+	if err := configureLoggingFromArgs(os.Args[1:], os.Stderr); err != nil {
+		return err
+	}
+
 	cfg, err := config.Load(os.Args[1:])
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
